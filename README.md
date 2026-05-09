@@ -1,58 +1,68 @@
 # nextjs_supervision
 
-Supervision Module (Admin module) for Vivance Travels
+Production-grade **SuperAdmin Portal** for Vivance Travels, built with **Next.js 14+ (App Router)** + **TypeScript**.
 
-# Requirement
+Base path: `http://127.0.0.1:3010/supervision` (dev server uses **port 3010** so it does not clash with another app on 3000).
 
-1. Have a login page with Username and Password. Once Login credentials are entered, call this API - {{baseURL}}/vivapi-user/user/authenticate (POST)
+## Setup
 
-Sample Request:
-{
-"userName" : "myUser",
-"password" : "mypasswd"
-}
-Sample Response:
-{
-"response": {
-"userId": 71,
-"userType": 4,
-"email": "createuser11@gmail.com",
-"userName": "myUser",
-"password": "mypasswd",
-"status": 0,
-"firstName": "Create",
-"middleName": null,
-"lastName": "User",
-"countryCode": 92,
-"phone": null,
-"emailActivation": false,
-"createdBy": null,
-"createdOn": "2025-01-26T21:37:01.000+00:00",
-"modifiedBy": null,
-"modifiedOn": "2025-01-26T21:37:01.000+00:00"
-},
-"message": null,
-"status": "success"
-}
+1. Install dependencies:
 
-2. Login page should also have Forget Password link. Once clicked, it should ask for Email and Phone number. Once provided, it should call API - {{baseURL}}/vivapi-user/user/forgotpasswd (POST)
+```bash
+npm install
+```
 
-The response will have new password.
-Send the new password through the email to the user (to the provided email address)
+2. Create `.env.local` from `.env.example`:
 
-3. Once logged in, it should have avatar at top right corner with User Name(obtained from response). It should have option to edit profile, Change Password and Sign out
+```bash
+copy .env.example .env.local
+```
 
-4. Since this is Administrator of the Vivance Application. It will have -
+3. Update `.env.local` (see `.env.example`):
 
-- Dashboard : It will show recent transactions, monthly, weekkly, daily charts (Needed API details will be provided later)
-- Users (For B2C, Agents, Sub Agents, Corporate, Sub Corporate, Sub Admin)
-- Queues : For Flight Cancellation, PNR Queue List, Non-issued Paid Ticket
-- Reports ; For B2c, Agent, Corporate
-- Account : Credit Balance, Debit Balance
-- Commission : Agent Commission
-- Markup : B2B, B2C, Corporate
-- GST Master : for TDS & GST
-- Master Balance Manager : For B2B, Corporate, B2B Credit Limit Request
-- Email Subscription
-- Bank Account Details
-- B2C Enquiry
+```env
+USER_REPO_URL=http://localhost:8082
+AUTH_URL=http://localhost:8084
+X_API_KEY=your-x-api-key
+AUTH_LOGIN_DOMAIN_KEY=...
+AUTH_LOGIN_USERNAME=...
+AUTH_LOGIN_PASSWORD=...
+AUTH_LOGIN_SYSTEM=...
+```
+
+`AUTH_URL` is used for `POST /vivapi-auth/app/auth/login` to obtain a **Bearer** token. That token and `X_API_KEY` are sent to `USER_REPO_URL` when calling user authenticate.
+
+4. Run the dev server (listens on **http://localhost:3010**):
+
+```bash
+npm run dev
+```
+
+To use another port temporarily: `npx next dev -p 3020`.
+
+## Routes
+
+- `/supervision/login` (public)
+- `/supervision/dashboard` (protected)
+
+## Authentication
+
+- **Login API (proxied via Next.js)**: `POST /api/supervision/auth/login`
+- Proxies to: `POST {USER_REPO_URL}/vivapi-user/user/authenticate`
+- Enforces `userType = 1` (SuperAdmin)
+- Stores JWT in an **httpOnly cookie** (`sv_token`)
+
+## Security
+
+- Route protection via `middleware.ts`
+- Auto-redirect to login when unauthenticated/expired
+- JWT is **never exposed to browser JavaScript**
+
+## API troubleshooting logs (opt-in)
+
+Set in `.env.local` when debugging (passwords, tokens, and auth headers are **redacted** in logs):
+
+- **`SUPERVISION_API_DEBUG=true`** — logs incoming/outgoing API route traffic in the **server terminal** (e.g. login proxy to `USER_REPO_URL`, `/api/supervision/auth/*`).
+- **`NEXT_PUBLIC_SUPERVISION_API_DEBUG=true`** — logs **browser** Axios calls (endpoint, method, params, sanitized headers/body, response).
+
+Output prefix: `[Supervision API]` with JSON details.
