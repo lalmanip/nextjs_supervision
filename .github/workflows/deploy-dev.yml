@@ -1,0 +1,99 @@
+# Deploy Supervision (Next.js) to dev VPS on push to `dev`.
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, VPS_HOST, VPS_USER, VPS_SSH_KEY
+#
+# Optional repository variables:
+#   SUPERVISION_IMAGE_NAME  (default: DOCKERHUB_USERNAME/nextjs-supervision)
+#   VPS_DEPLOY_PATH         (remote directory containing docker-compose.yml, if used)
+#
+# On the VPS, either:
+#   A) Place a docker-compose.yml that uses image ${{ env.IMAGE_REF }} / dev-latest, then set VPS_DEPLOY_PATH, or
+#   B) Edit the deploy script below to match your docker run / compose layout and env file path.
+
+name: Deploy Supervision (Dev → VPS)
+
+on:
+  push:
+    branches:
+      - dev
+
+env:
+  IMAGE_TAG: dev-${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker image name
+        id: image
+        run: |
+          if [ -n "${{ vars.SUPERVISION_IMAGE_NAME }}" ]; then
+            echo "name=${{ vars.SUPERVISION_IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ secrets.DOCKERHUB_USERNAME }}/nextjs-supervision" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ env.IMAGE_TAG }}
+            ${{ steps.image.outputs.name }}:dev-latest
+
+      - name: Deploy on VPS (Docker)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            IMAGE="${{ steps.image.outputs.name }}"
+            TAG="${{ env.IMAGE_TAG }}"
+            echo "Pulling ${IMAGE}:${TAG}"
+
+            docker pull "${IMAGE}:${TAG}"
+            docker pull "${IMAGE}:dev-latest"
+
+            DEPLOY_PATH="${{ vars.VPS_DEPLOY_PATH }}"
+            if [ -n "$DEPLOY_PATH" ] && [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+              cd "$DEPLOY_PATH"
+              export SUPERVISION_IMAGE="${IMAGE}:${TAG}"
+              docker compose pull
+              docker compose up -d
+              docker image prune -f
+              exit 0
+            fi
+
+            # Fallback: single container (edit name / host port / env as needed)
+            docker stop supervision 2>/dev/null || true
+            docker rm supervision 2>/dev/null || true
+            if [ -f "${HOME}/supervision.env" ]; then
+              docker run -d \
+                --name supervision \
+                --restart unless-stopped \
+                -p 3010:3000 \
+                --env-file "${HOME}/supervision.env" \
+                "${IMAGE}:${TAG}"
+            else
+              docker run -d \
+                --name supervision \
+                --restart unless-stopped \
+                -p 3010:3000 \
+                "${IMAGE}:${TAG}"
+            fi
+            docker image prune -f

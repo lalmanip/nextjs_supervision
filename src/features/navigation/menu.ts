@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Percent,
   ShieldCheck,
+  Ticket,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
 
@@ -67,6 +68,13 @@ export const supervisionMenu: MenuItem[] = [
         required: "supervision.setupPromotions.view",
       },
     ],
+  },
+  {
+    key: "hold-tickets",
+    label: "Hold Tickets",
+    href: "/supervision/hold-tickets",
+    icon: Ticket,
+    required: "supervision.holdTickets.view",
   },
 ];
 

@@ -82,7 +82,7 @@ export async function POST(req: Request) {
 
     const upstreamHeaders = {
       "Content-Type": "application/json",
-      "X-API-KEY": env.X_API_KEY,
+      "X-API-KEY": env.VIV_X_API_KEY,
       Authorization: `Bearer ${gatewayBearer}`,
     };
 

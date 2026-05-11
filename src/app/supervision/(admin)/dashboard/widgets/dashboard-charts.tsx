@@ -32,14 +32,14 @@ export default function DashboardCharts() {
         <Line
           type="monotone"
           dataKey="bookings"
-          stroke="#2563eb"
+          stroke="#fc6603"
           strokeWidth={2}
           dot={false}
         />
         <Line
           type="monotone"
           dataKey="revenue"
-          stroke="#16a34a"
+          stroke="#e55a03"
           strokeWidth={2}
           dot={false}
         />

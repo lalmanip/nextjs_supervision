@@ -53,7 +53,7 @@ function MenuNode({
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            "w-full flex items-center gap-2 rounded-md py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900",
+            "w-full flex items-center gap-2 rounded-md py-2 text-sm text-zinc-700 hover:bg-primary/10 dark:text-zinc-200 dark:hover:bg-primary/10",
             leftPad
           )}
           aria-expanded={open}
@@ -119,13 +119,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         >
           <div className={cn("h-14 flex items-center", collapsed ? "px-2" : "px-3")}>
             <div className="flex items-center gap-2 flex-1">
-              <div className="h-9 w-9 rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 flex items-center justify-center text-sm font-semibold">
+              <div className="h-9 w-9 rounded-lg bg-primary text-white shadow-sm flex items-center justify-center text-sm font-semibold">
                 SV
               </div>
               {!collapsed ? (
                 <div className="leading-tight">
-                  <div className="text-sm font-semibold">Supervision</div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Supervision
+                  </div>
+                  <div className="text-xs text-primary/90 dark:text-primary/80">
                     SuperAdmin Portal
                   </div>
                 </div>

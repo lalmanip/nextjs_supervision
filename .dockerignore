@@ -1,0 +1,21 @@
+# dependencies & build
+node_modules
+.next
+out
+
+# env & secrets (inject at runtime on the VPS or via CI build-args)
+.env
+.env.*
+!.env.example
+
+# git & IDE
+.git
+.github
+.cursor
+*.md
+!README.md
+
+# misc
+coverage
+.turbo
+npm-debug.log*

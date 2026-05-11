@@ -8,7 +8,7 @@ export default function Home() {
         </p>
         <a
           href="/supervision/login"
-          className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white/90"
+          className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white shadow-sm hover:bg-primary-dark"
         >
           Go to SuperAdmin Login
         </a>
