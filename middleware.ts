@@ -7,6 +7,11 @@ const AUTH_COOKIE = "sv_token";
 
 function isPublicPath(pathname: string) {
   return (
+    // Public assets required to render login page
+    pathname.startsWith(`${SUPERVISION_PREFIX}/_next/`) ||
+    pathname === `${SUPERVISION_PREFIX}/favicon.ico` ||
+    pathname === `${SUPERVISION_PREFIX}/robots.txt` ||
+    pathname === `${SUPERVISION_PREFIX}/sitemap.xml` ||
     pathname === `${SUPERVISION_PREFIX}/login` ||
     pathname.startsWith("/api/supervision/auth/login")
   );
