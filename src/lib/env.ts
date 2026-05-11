@@ -16,7 +16,10 @@ const serverEnvSchema = z.object({
   /** Sent as X-API-KEY on calls to USER_REPO_URL APIs */
   VIV_X_API_KEY: z
     .string()
-    .min(1, "VIV_X_API_KEY is required. Set it in .env.local."),
+    .min(
+      1,
+      "X-API-KEY is required. Set VIV_X_API_KEY (preferred) or X_API_KEY in .env.local."
+    ),
   AUTH_APP_DOMAIN_KEY: z.string().min(1),
   AUTH_APP_USERNAME: z.string().min(1),
   AUTH_APP_PASSWORD: z.string().min(1),
@@ -57,8 +60,10 @@ function resolveAuthUrl(): string {
 
 /** Production must set a real key; dev may omit and use a placeholder. */
 function resolveXApiKey(): string {
-  const trimmed = process.env.VIV_X_API_KEY?.trim();
-  if (trimmed) return trimmed;
+  const preferred = process.env.VIV_X_API_KEY?.trim();
+  if (preferred) return preferred;
+  const legacy = process.env.X_API_KEY?.trim();
+  if (legacy) return legacy;
   if (isNonProduction()) {
     return "dev";
   }

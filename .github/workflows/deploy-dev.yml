@@ -86,14 +86,16 @@ jobs:
               docker run -d \
                 --name supervision \
                 --restart unless-stopped \
-                -p 3010:3000 \
+                -p 3010:3010 \
+                -e PORT=3010 \
                 --env-file "${HOME}/supervision.env" \
                 "${IMAGE}:${TAG}"
             else
               docker run -d \
                 --name supervision \
                 --restart unless-stopped \
-                -p 3010:3000 \
+                -p 3010:3010 \
+                -e PORT=3010 \
                 "${IMAGE}:${TAG}"
             fi
             docker image prune -f

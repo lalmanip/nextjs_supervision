@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     body = (await req.json()) as AuthenticateRequest;
   } catch {
     return NextResponse.json(
-      { message: "Invalid JSON body" },
+      { message: "Invalid JSON body " },
       { status: 400 }
     );
   }
