@@ -1,16 +1,13 @@
-# Deploy Supervision (Next.js) to dev VPS on push to `dev`.
+# Deploy Supervision (Next.js) to Kubernetes (Dev) on push to `dev`.
+# Mirrors vivance-ui's pattern: build → push image → SSH to VPS → kubectl set image → rollout.
+#
 # Secrets (repo → Settings → Secrets and variables → Actions):
 #   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, VPS_HOST, VPS_USER, VPS_SSH_KEY
 #
-# Optional repository variables:
-#   SUPERVISION_IMAGE_NAME  (default: DOCKERHUB_USERNAME/nextjs-supervision)
-#   VPS_DEPLOY_PATH         (remote directory containing docker-compose.yml, if used)
-#
-# On the VPS, either:
-#   A) Place a docker-compose.yml that uses image ${{ env.IMAGE_REF }} / dev-latest, then set VPS_DEPLOY_PATH, or
-#   B) Edit the deploy script below to match your docker run / compose layout and env file path.
-
-name: Deploy Supervision (Dev → VPS)
+# Optional repo variables (Settings → Secrets and variables → Actions → Variables):
+#   SUPERVISION_IMAGE_NAME   default: {DOCKERHUB_USERNAME}/nextjs-supervision
+#   SUPERVISION_DEPLOYMENT   default: nextjs-supervision
+#   SUPERVISION_CONTAINER    default: nextjs-supervision
 
 on:
   push:
@@ -53,7 +50,7 @@ jobs:
             ${{ steps.image.outputs.name }}:${{ env.IMAGE_TAG }}
             ${{ steps.image.outputs.name }}:dev-latest
 
-      - name: Deploy on VPS (Docker)
+      - name: Deploy to Kubernetes (via VPS SSH)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -64,38 +61,26 @@ jobs:
             set -euo pipefail
             IMAGE="${{ steps.image.outputs.name }}"
             TAG="${{ env.IMAGE_TAG }}"
-            echo "Pulling ${IMAGE}:${TAG}"
 
-            docker pull "${IMAGE}:${TAG}"
-            docker pull "${IMAGE}:dev-latest"
+            DEPLOYMENT="${{ vars.SUPERVISION_DEPLOYMENT }}"
+            CONTAINER="${{ vars.SUPERVISION_CONTAINER }}"
 
-            DEPLOY_PATH="${{ vars.VPS_DEPLOY_PATH }}"
-            if [ -n "$DEPLOY_PATH" ] && [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
-              cd "$DEPLOY_PATH"
-              export SUPERVISION_IMAGE="${IMAGE}:${TAG}"
-              docker compose pull
-              docker compose up -d
-              docker image prune -f
-              exit 0
-            fi
+            if [ -z "$DEPLOYMENT" ]; then DEPLOYMENT="nextjs-supervision"; fi
+            if [ -z "$CONTAINER" ]; then CONTAINER="nextjs-supervision"; fi
 
-            # Fallback: single container (edit name / host port / env as needed)
-            docker stop supervision 2>/dev/null || true
-            docker rm supervision 2>/dev/null || true
-            if [ -f "${HOME}/supervision.env" ]; then
-              docker run -d \
-                --name supervision \
-                --restart unless-stopped \
-                -p 3010:3010 \
-                -e PORT=3010 \
-                --env-file "${HOME}/supervision.env" \
-                "${IMAGE}:${TAG}"
-            else
-              docker run -d \
-                --name supervision \
-                --restart unless-stopped \
-                -p 3010:3010 \
-                -e PORT=3010 \
-                "${IMAGE}:${TAG}"
-            fi
-            docker image prune -f
+            echo "Deploying to Kubernetes:"
+            echo "  deployment: $DEPLOYMENT"
+            echo "  container:  $CONTAINER"
+            echo "  image:      $IMAGE:$TAG"
+
+            kubectl version --client=true
+            kubectl get deployment "$DEPLOYMENT" -o wide
+
+            kubectl set image "deployment/$DEPLOYMENT" \
+              "$CONTAINER=$IMAGE:$TAG"
+
+            kubectl annotate "deployment/$DEPLOYMENT" \
+              kubernetes.io/change-cause="Deploy dev-${GITHUB_SHA} via GitHub Actions" \
+              --overwrite
+
+            kubectl rollout status "deployment/$DEPLOYMENT"
