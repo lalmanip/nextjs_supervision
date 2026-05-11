@@ -93,7 +93,7 @@ jobs:
               "$CONTAINER=$IMAGE:$TAG"
 
             kubectl annotate "deployment/$DEPLOYMENT" \
-              kubernetes.io/change-cause="Deploy dev-${GITHUB_SHA} via GitHub Actions" \
+              kubernetes.io/change-cause="Deploy dev-${{ github.sha }} via GitHub Actions" \
               --overwrite
 
             kubectl rollout status "deployment/$DEPLOYMENT"
