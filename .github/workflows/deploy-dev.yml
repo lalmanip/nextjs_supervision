@@ -62,11 +62,17 @@ jobs:
             IMAGE="${{ steps.image.outputs.name }}"
             TAG="${{ env.IMAGE_TAG }}"
 
+            # GitHub repo variables (optional)
             DEPLOYMENT="${{ vars.SUPERVISION_DEPLOYMENT }}"
             CONTAINER="${{ vars.SUPERVISION_CONTAINER }}"
 
             if [ -z "$DEPLOYMENT" ]; then DEPLOYMENT="nextjs-supervision"; fi
             if [ -z "$CONTAINER" ]; then CONTAINER="nextjs-supervision"; fi
+
+            echo "GitHub vars seen by workflow:"
+            echo "  SUPERVISION_DEPLOYMENT='${{ vars.SUPERVISION_DEPLOYMENT }}'"
+            echo "  SUPERVISION_CONTAINER='${{ vars.SUPERVISION_CONTAINER }}'"
+            echo "  SUPERVISION_IMAGE_NAME='${{ vars.SUPERVISION_IMAGE_NAME }}'"
 
             echo "Deploying to Kubernetes:"
             echo "  deployment: $DEPLOYMENT"
@@ -74,7 +80,14 @@ jobs:
             echo "  image:      $IMAGE:$TAG"
 
             kubectl version --client=true
-            kubectl get deployment "$DEPLOYMENT" -o wide
+            if ! kubectl get deployment "$DEPLOYMENT" -o wide; then
+              echo ""
+              echo "Deployment '$DEPLOYMENT' not found. Available deployments in current namespace:"
+              kubectl get deployments -o wide || true
+              echo ""
+              echo "Tip: set repo variables SUPERVISION_DEPLOYMENT and SUPERVISION_CONTAINER to match your YAML."
+              exit 1
+            fi
 
             kubectl set image "deployment/$DEPLOYMENT" \
               "$CONTAINER=$IMAGE:$TAG"
