@@ -1,0 +1,14 @@
+# Example for Hostinger VPS: copy to your server, set VPS_DEPLOY_PATH in GitHub repo variables,
+# and ensure SUPERVISION_IMAGE is passed (workflow sets export SUPERVISION_IMAGE when using compose path).
+#
+#   export SUPERVISION_IMAGE="youruser/nextjs-supervision:dev-latest"
+#   docker compose up -d
+
+services:
+  supervision:
+    image: ${SUPERVISION_IMAGE:-yourdockerhub/nextjs-supervision:dev-latest}
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    env_file:
+      - ./supervision.env

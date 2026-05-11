@@ -63,15 +63,15 @@ export async function fetchVivapiAppBearer(
   const base = env.AUTH_URL.replace(/\/$/, "");
   const url = `${base}/vivapi-auth/app/auth/login`;
   const body: VivapiAppAuthLoginBody = {
-    domain_key: env.AUTH_LOGIN_DOMAIN_KEY,
-    username: env.AUTH_LOGIN_USERNAME,
-    password: env.AUTH_LOGIN_PASSWORD,
-    system: env.AUTH_LOGIN_SYSTEM,
+    domain_key: env.AUTH_APP_DOMAIN_KEY,
+    username: env.AUTH_APP_USERNAME,
+    password: env.AUTH_APP_PASSWORD,
+    system: env.AUTH_APP_SYSTEM,
   };
 
   const requestHeaders = {
     "Content-Type": "application/json",
-    "X-API-KEY": env.X_API_KEY,
+    "X-API-KEY": env.VIV_X_API_KEY,
   };
 
   if (isServerApiDebugEnabled()) {

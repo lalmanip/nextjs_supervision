@@ -1,22 +1,24 @@
 @import "tailwindcss";
 
+/* Only apply `dark:` utilities when `.dark` is on an ancestor (not system preference). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Brand palette aligned with vivance-ui (tailwind.config.ts) */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
+  --primary: #fc6603;
+  --primary-dark: #e55a03;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Vivance brand */
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
