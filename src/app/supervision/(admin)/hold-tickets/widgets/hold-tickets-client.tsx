@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { http } from "@/services/http";
 import { getApiErrorMessage } from "@/services/http/client";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable } from "@/components/common/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
   HOLD_TICKET_TABLE_COLUMNS,
   type HoldTicketRow,
 } from "@/types/hold-ticket";
+import type { TboReleasePnrUpstream } from "@/types/tbo-release-pnr";
 
 type ApiOk = {
   status: "success";
@@ -67,6 +69,43 @@ function buildHoldTicketColumns(rows: HoldTicketRow[]): ColumnDef<HoldTicketRow>
   return cols;
 }
 
+type ReleasePnrApiOk = {
+  status: "success";
+  data?: TboReleasePnrUpstream;
+};
+
+function interpretReleaseUpstream(upstream: TboReleasePnrUpstream | undefined): {
+  ok: boolean;
+  message: string;
+} {
+  if (!upstream) {
+    return { ok: true, message: "Release request completed." };
+  }
+  const inner = upstream.Response ?? upstream.response;
+  if (!inner) {
+    return { ok: true, message: "Release request completed." };
+  }
+  const status = inner.ResponseStatus;
+  const errCode = inner.Error?.ErrorCode;
+  const errMsg = inner.Error?.ErrorMessage?.trim();
+  const businessOk =
+    status === 1 && (errCode === undefined || errCode === 0);
+  if (businessOk) {
+    return {
+      ok: true,
+      message: errMsg ? `Released: ${errMsg}` : "PNR released successfully.",
+    };
+  }
+  return {
+    ok: false,
+    message:
+      errMsg ||
+      (status !== undefined
+        ? `Release failed (ResponseStatus: ${status}).`
+        : "Release failed."),
+  };
+}
+
 export default function HoldTicketsClient() {
   const [loading, setLoading] = React.useState(true);
   const [rows, setRows] = React.useState<HoldTicketRow[]>([]);
@@ -93,7 +132,68 @@ export default function HoldTicketsClient() {
     void load();
   }, [load]);
 
-  const columns = React.useMemo(() => buildHoldTicketColumns(rows), [rows]);
+  const [selectedRowId, setSelectedRowId] = React.useState<number | null>(null);
+  const [releaseRow, setReleaseRow] = React.useState<HoldTicketRow | null>(null);
+
+  const selectedRow = React.useMemo(
+    () => rows.find((r) => r.id === selectedRowId) ?? null,
+    [rows, selectedRowId]
+  );
+
+  React.useEffect(() => {
+    if (selectedRowId === null) return;
+    if (!rows.some((r) => r.id === selectedRowId)) {
+      setSelectedRowId(null);
+    }
+  }, [rows, selectedRowId]);
+
+  const baseColumns = React.useMemo(() => buildHoldTicketColumns(rows), [rows]);
+
+  const columns = React.useMemo<ColumnDef<HoldTicketRow>[]>(() => {
+    if (baseColumns.length === 0) return [];
+    const selectColumn: ColumnDef<HoldTicketRow> = {
+      id: "select",
+      header: () => <span className="sr-only">Select row</span>,
+      cell: ({ row }) => (
+        <div className="flex justify-center px-1">
+          <input
+            type="radio"
+            name="hold-ticket-selection"
+            className="h-4 w-4 cursor-pointer accent-primary"
+            checked={selectedRowId === row.original.id}
+            onChange={() => setSelectedRowId(row.original.id)}
+            aria-label={`Select PNR ${row.original.pnr}`}
+          />
+        </div>
+      ),
+      enableSorting: false,
+    };
+    return [selectColumn, ...baseColumns];
+  }, [baseColumns, selectedRowId]);
+
+  const confirmRelease = React.useCallback(async () => {
+    if (!releaseRow) return;
+    const row = releaseRow;
+    try {
+      const { data } = await http.post<ReleasePnrApiOk>(
+        "/api/supervision/flight/tbo/release-pnr",
+        {
+          BookingId: String(row.bookingId),
+          Source: String(row.source),
+        }
+      );
+      const { ok, message } = interpretReleaseUpstream(data.data);
+      if (!ok) {
+        throw new Error(message);
+      }
+      toast.success(message, { description: `PNR ${row.pnr} · booking ${row.bookingId}` });
+      setSelectedRowId(null);
+      await load();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+      throw e;
+    }
+  }, [releaseRow, load]);
 
   return (
     <div className="space-y-6">
@@ -147,14 +247,64 @@ export default function HoldTicketsClient() {
               ) : null}
             </div>
           ) : (
-            <DataTable<HoldTicketRow, unknown>
-              columns={columns}
-              data={rows}
-              searchPlaceholder="Search hold tickets..."
-            />
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  Select a booking with the radio control, then run an action.
+                </p>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedRow}
+                    onClick={() => {
+                      if (selectedRow) setReleaseRow(selectedRow);
+                    }}
+                  >
+                    Release PNR
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={!selectedRow}
+                    onClick={() => {
+                      if (!selectedRow) return;
+                      toast.info("Get Ticket is not wired to an API yet.", {
+                        description: `PNR ${selectedRow.pnr} · booking ${selectedRow.bookingId}`,
+                      });
+                    }}
+                  >
+                    Get Ticket
+                  </Button>
+                </div>
+              </div>
+              <DataTable<HoldTicketRow, unknown>
+                columns={columns}
+                data={rows}
+                searchPlaceholder="Search hold tickets..."
+              />
+            </div>
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={releaseRow !== null}
+        title="Release PNR"
+        description={
+          releaseRow
+            ? `Call release-pnr for PNR ${releaseRow.pnr} (booking ${releaseRow.bookingId}, source ${releaseRow.source})?`
+            : undefined
+        }
+        confirmText="Release"
+        destructive
+        onOpenChange={(open) => {
+          if (!open) setReleaseRow(null);
+        }}
+        onConfirm={confirmRelease}
+      />
     </div>
   );
 }
