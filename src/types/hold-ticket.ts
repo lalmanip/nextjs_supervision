@@ -1,5 +1,6 @@
 /**
  * Shape of each element in GET vivapi-user/flight-booking/hold-tickets → `response[]`.
+ * Actual payloads may use snake_case keys; the table builder resolves common variants.
  */
 export type HoldTicketRow = {
   id: number;
@@ -19,6 +20,8 @@ export type HoldTicketRow = {
   fareType: string;
   resultFareType: string;
   source: number;
+  /** When present from API, shown after Source in the hold table. */
+  lastTicketDate?: string | null;
   isLcc: boolean;
   isDomestic: boolean;
   nonRefundable: boolean;
@@ -42,44 +45,96 @@ export type HoldTicketRow = {
   updatedAt: string;
 };
 
-/** Preferred column order for the hold tickets table (API field → header label). */
-export const HOLD_TICKET_TABLE_COLUMNS: { key: keyof HoldTicketRow; label: string }[] = [
-  { key: "id", label: "ID" },
-  { key: "bookingId", label: "Booking ID" },
-  { key: "parentBookingId", label: "Parent booking" },
-  { key: "appReference", label: "App ref" },
-  { key: "pnr", label: "PNR" },
-  { key: "tboConfNo", label: "TBO conf." },
-  { key: "traceId", label: "Trace ID" },
-  { key: "origin", label: "Origin" },
-  { key: "destination", label: "Destination" },
-  { key: "airlineCode", label: "Airline" },
-  { key: "validatingAirlineCode", label: "Validating" },
-  { key: "fareType", label: "Fare type" },
-  { key: "resultFareType", label: "Result fare" },
-  { key: "journeyType", label: "Journey type" },
-  { key: "tripIndicator", label: "Trip" },
-  { key: "searchCombinationType", label: "Search combo" },
-  { key: "source", label: "Source" },
-  { key: "status", label: "Status" },
-  { key: "isDomestic", label: "Domestic" },
-  { key: "isLcc", label: "LCC" },
-  { key: "nonRefundable", label: "Non-ref." },
-  { key: "isManual", label: "Manual" },
-  { key: "isSeatsBooked", label: "Seats booked" },
-  { key: "isCouponApplicable", label: "Coupon" },
-  { key: "isWebCheckinAllowed", label: "Web CI" },
-  { key: "isAutoReissuanceAllowed", label: "Auto reissue" },
-  { key: "isPartialVoidAllowed", label: "Partial void" },
-  { key: "fareClassification", label: "Fare class." },
-  { key: "supplierFareClasses", label: "Supplier fare cls" },
-  { key: "remarks", label: "Remarks" },
-  { key: "airlineRemark", label: "Airline remark" },
-  { key: "invoiceNo", label: "Invoice #" },
-  { key: "invoiceAmount", label: "Invoice amt" },
-  { key: "invoiceStatus", label: "Inv. status" },
-  { key: "invoiceCreatedOn", label: "Inv. created" },
-  { key: "issuancePcc", label: "Issuance PCC" },
-  { key: "createdAt", label: "Created" },
-  { key: "updatedAt", label: "Updated" },
+/** Row keys we never show as table columns (large / internal payloads). */
+const HOLD_TICKET_HIDDEN_KEYS_LC = new Set([
+  "itinerary_details",
+  "passenger_details",
+  "result_token",
+]);
+
+export function isHoldTicketHiddenColumn(key: string): boolean {
+  return HOLD_TICKET_HIDDEN_KEYS_LC.has(key.toLowerCase());
+}
+
+function camelToSnake(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase();
+}
+
+/** `booking_id` → `Booking_id` style seen on some vivapi responses. */
+function leadingCapsSnake(snake: string): string {
+  const parts = snake.split("_");
+  if (!parts[0]) return snake;
+  const first = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
+  const rest = parts.slice(1).join("_").toLowerCase();
+  return rest ? `${first}_${rest}` : first;
+}
+
+/** Typical API key spellings for a logical camelCase field. */
+function K(camel: string, ...extras: string[]): string[] {
+  const snake = camelToSnake(camel);
+  const lead = leadingCapsSnake(snake);
+  return [...new Set([camel, snake, lead, ...extras])];
+}
+
+export type HoldTicketColumnSpec = {
+  label: string;
+  /** First key that exists on the row is used for this column. */
+  keys: string[];
+};
+
+/** Preferred column order for the hold tickets table. */
+export const HOLD_TICKET_TABLE_COLUMNS: HoldTicketColumnSpec[] = [
+  { keys: K("id"), label: "ID" },
+  { keys: K("bookingId"), label: "Booking ID" },
+  { keys: K("parentBookingId"), label: "Parent booking" },
+  { keys: K("appReference"), label: "App ref" },
+  { keys: K("pnr"), label: "PNR" },
+  { keys: K("tboConfNo"), label: "TBO conf." },
+  { keys: K("traceId"), label: "Trace ID" },
+  { keys: K("origin"), label: "Origin" },
+  { keys: K("destination"), label: "Destination" },
+  { keys: K("airlineCode"), label: "Airline" },
+  { keys: K("validatingAirlineCode"), label: "Validating" },
+  { keys: K("fareType"), label: "Fare type" },
+  { keys: K("resultFareType"), label: "Result fare" },
+  { keys: K("journeyType"), label: "Journey type" },
+  { keys: K("tripIndicator"), label: "Trip" },
+  { keys: K("searchCombinationType"), label: "Search combo" },
+  { keys: K("source"), label: "Source" },
+  {
+    keys: [
+      ...K("lastTicketDate"),
+      "LastTicketDate",
+      "Last_Ticket_Date",
+      "lastTicketDt",
+      "LastTicketDt",
+      "last_tkt_date",
+      "Last_Tkt_Date",
+    ],
+    label: "Last Ticket Date",
+  },
+  { keys: K("status"), label: "Status" },
+  { keys: K("isDomestic"), label: "Domestic" },
+  { keys: K("isLcc"), label: "LCC" },
+  { keys: K("nonRefundable"), label: "Non-ref." },
+  { keys: K("isManual"), label: "Manual" },
+  { keys: K("isSeatsBooked"), label: "Seats booked" },
+  { keys: K("isCouponApplicable"), label: "Coupon" },
+  { keys: K("isWebCheckinAllowed"), label: "Web CI" },
+  { keys: K("isAutoReissuanceAllowed"), label: "Auto reissue" },
+  { keys: K("isPartialVoidAllowed"), label: "Partial void" },
+  { keys: K("fareClassification"), label: "Fare class." },
+  { keys: K("supplierFareClasses"), label: "Supplier fare cls" },
+  { keys: K("remarks"), label: "Remarks" },
+  { keys: K("airlineRemark"), label: "Airline remark" },
+  { keys: K("invoiceNo"), label: "Invoice #" },
+  { keys: K("invoiceAmount"), label: "Invoice amt" },
+  { keys: K("invoiceStatus"), label: "Inv. status" },
+  { keys: K("invoiceCreatedOn"), label: "Inv. created" },
+  { keys: K("issuancePcc"), label: "Issuance PCC" },
+  { keys: K("createdAt"), label: "Created" },
+  { keys: K("updatedAt"), label: "Updated" },
 ];

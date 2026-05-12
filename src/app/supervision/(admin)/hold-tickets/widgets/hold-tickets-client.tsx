@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   HOLD_TICKET_TABLE_COLUMNS,
+  isHoldTicketHiddenColumn,
   type HoldTicketRow,
 } from "@/types/hold-ticket";
 import type { TboReleasePnrUpstream } from "@/types/tbo-release-pnr";
@@ -21,6 +22,7 @@ import {
   getHoldTicketRowId,
   type HoldTicketLoose,
 } from "@/lib/hold-ticket-row-fields";
+import { holdTicketLastTicketDateSortingFn } from "@/lib/hold-ticket-sort";
 
 type ApiOk = {
   status: "success";
@@ -47,19 +49,26 @@ function buildHoldTicketColumns(rows: HoldTicketRow[]): ColumnDef<HoldTicketRow>
   if (rows.length === 0) return [];
   const present = new Set<string>();
   for (const row of rows) {
-    Object.keys(row as object).forEach((k) => present.add(k));
+    Object.keys(row as object).forEach((k) => {
+      if (!isHoldTicketHiddenColumn(k)) present.add(k);
+    });
   }
 
   const cols: ColumnDef<HoldTicketRow>[] = [];
 
-  for (const { key, label } of HOLD_TICKET_TABLE_COLUMNS) {
-    if (!present.has(key)) continue;
+  for (const { keys, label } of HOLD_TICKET_TABLE_COLUMNS) {
+    const found = keys.find((k) => present.has(k));
+    if (!found) continue;
+    const isLastTicketDate = label === "Last Ticket Date";
     cols.push({
-      accessorKey: key,
+      id: found,
+      accessorKey: found as keyof HoldTicketRow & string,
       header: label,
-      cell: ({ row }) => formatCell(row.getValue(key)),
+      ...(isLastTicketDate ? { sortingFn: holdTicketLastTicketDateSortingFn } : {}),
+      cell: ({ row }) =>
+        formatCell((row.original as Record<string, unknown>)[found]),
     });
-    present.delete(key);
+    present.delete(found);
   }
 
   for (const key of [...present].sort()) {
