@@ -16,6 +16,11 @@ import {
   type HoldTicketRow,
 } from "@/types/hold-ticket";
 import type { TboReleasePnrUpstream } from "@/types/tbo-release-pnr";
+import {
+  getHoldTicketReleaseFields,
+  getHoldTicketRowId,
+  type HoldTicketLoose,
+} from "@/lib/hold-ticket-row-fields";
 
 type ApiOk = {
   status: "success";
@@ -106,6 +111,11 @@ function interpretReleaseUpstream(upstream: TboReleasePnrUpstream | undefined): 
   };
 }
 
+function releaseConfirmDescription(row: HoldTicketRow): string {
+  const f = getHoldTicketReleaseFields(row as HoldTicketLoose);
+  return `Call release-pnr for PNR ${f.pnr || "—"} (booking ${f.bookingId || "—"}, source ${f.source || "—"})?`;
+}
+
 export default function HoldTicketsClient() {
   const [loading, setLoading] = React.useState(true);
   const [rows, setRows] = React.useState<HoldTicketRow[]>([]);
@@ -132,17 +142,19 @@ export default function HoldTicketsClient() {
     void load();
   }, [load]);
 
-  const [selectedRowId, setSelectedRowId] = React.useState<number | null>(null);
+  const [selectedRowId, setSelectedRowId] = React.useState<string | null>(null);
   const [releaseRow, setReleaseRow] = React.useState<HoldTicketRow | null>(null);
 
   const selectedRow = React.useMemo(
-    () => rows.find((r) => r.id === selectedRowId) ?? null,
+    () =>
+      rows.find((r) => getHoldTicketRowId(r as HoldTicketLoose) === selectedRowId) ??
+      null,
     [rows, selectedRowId]
   );
 
   React.useEffect(() => {
     if (selectedRowId === null) return;
-    if (!rows.some((r) => r.id === selectedRowId)) {
+    if (!rows.some((r) => getHoldTicketRowId(r as HoldTicketLoose) === selectedRowId)) {
       setSelectedRowId(null);
     }
   }, [rows, selectedRowId]);
@@ -154,18 +166,22 @@ export default function HoldTicketsClient() {
     const selectColumn: ColumnDef<HoldTicketRow> = {
       id: "select",
       header: () => <span className="sr-only">Select row</span>,
-      cell: ({ row }) => (
-        <div className="flex justify-center px-1">
-          <input
-            type="radio"
-            name="hold-ticket-selection"
-            className="h-4 w-4 cursor-pointer accent-primary"
-            checked={selectedRowId === row.original.id}
-            onChange={() => setSelectedRowId(row.original.id)}
-            aria-label={`Select PNR ${row.original.pnr}`}
-          />
-        </div>
-      ),
+      cell: ({ row }) => {
+        const rid = getHoldTicketRowId(row.original as HoldTicketLoose);
+        const pnr = getHoldTicketReleaseFields(row.original as HoldTicketLoose).pnr;
+        return (
+          <div className="flex justify-center px-1">
+            <input
+              type="radio"
+              name="hold-ticket-selection"
+              className="h-4 w-4 cursor-pointer accent-primary"
+              checked={selectedRowId === rid && rid !== ""}
+              onChange={() => setSelectedRowId(rid || null)}
+              aria-label={pnr ? `Select PNR ${pnr}` : "Select row"}
+            />
+          </div>
+        );
+      },
       enableSorting: false,
     };
     return [selectColumn, ...baseColumns];
@@ -173,20 +189,21 @@ export default function HoldTicketsClient() {
 
   const confirmRelease = React.useCallback(async () => {
     if (!releaseRow) return;
-    const row = releaseRow;
+    const row = releaseRow as HoldTicketLoose;
+    const { bookingId, source, pnr } = getHoldTicketReleaseFields(row);
     try {
       const { data } = await http.post<ReleasePnrApiOk>(
         "/api/supervision/flight/tbo/release-pnr",
         {
-          BookingId: String(row.bookingId),
-          Source: String(row.source),
+          BookingId: bookingId,
+          Source: source,
         }
       );
       const { ok, message } = interpretReleaseUpstream(data.data);
       if (!ok) {
         throw new Error(message);
       }
-      toast.success(message, { description: `PNR ${row.pnr} · booking ${row.bookingId}` });
+      toast.success(message, { description: `PNR ${pnr || "—"} · booking ${bookingId}` });
       setSelectedRowId(null);
       await load();
     } catch (e) {
@@ -259,7 +276,13 @@ export default function HoldTicketsClient() {
                     size="sm"
                     disabled={!selectedRow}
                     onClick={() => {
-                      if (selectedRow) setReleaseRow(selectedRow);
+                      if (!selectedRow) return;
+                      const f = getHoldTicketReleaseFields(selectedRow as HoldTicketLoose);
+                      if (!f.bookingId || !f.source) {
+                        toast.error("Selected row is missing booking id or source.");
+                        return;
+                      }
+                      setReleaseRow(selectedRow);
                     }}
                   >
                     Release PNR
@@ -271,8 +294,9 @@ export default function HoldTicketsClient() {
                     disabled={!selectedRow}
                     onClick={() => {
                       if (!selectedRow) return;
+                      const f = getHoldTicketReleaseFields(selectedRow as HoldTicketLoose);
                       toast.info("Get Ticket is not wired to an API yet.", {
-                        description: `PNR ${selectedRow.pnr} · booking ${selectedRow.bookingId}`,
+                        description: `PNR ${f.pnr || "—"} · booking ${f.bookingId || "—"}`,
                       });
                     }}
                   >
@@ -293,11 +317,7 @@ export default function HoldTicketsClient() {
       <ConfirmDialog
         open={releaseRow !== null}
         title="Release PNR"
-        description={
-          releaseRow
-            ? `Call release-pnr for PNR ${releaseRow.pnr} (booking ${releaseRow.bookingId}, source ${releaseRow.source})?`
-            : undefined
-        }
+        description={releaseRow ? releaseConfirmDescription(releaseRow) : undefined}
         confirmText="Release"
         destructive
         onOpenChange={(open) => {
