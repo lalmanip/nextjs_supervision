@@ -6,6 +6,8 @@ import {
   LayoutDashboard,
   Percent,
   ShieldCheck,
+  Inbox,
+  MessageSquare,
   Ticket,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
@@ -75,6 +77,20 @@ export const supervisionMenu: MenuItem[] = [
     href: "/supervision/hold-tickets",
     icon: Ticket,
     required: "supervision.holdTickets.view",
+  },
+  {
+    key: "enquiry",
+    label: "Enquiry",
+    icon: Inbox,
+    children: [
+      {
+        key: "b2c-enquiry",
+        label: "B2C Enquiry",
+        href: "/supervision/b2c-enquiries",
+        icon: MessageSquare,
+        required: "supervision.b2cEnquiries.view",
+      },
+    ],
   },
 ];
 
