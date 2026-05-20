@@ -13,6 +13,7 @@ const DEFAULT_PERMISSIONS: Permission[] = [
   "supervision.agencyBalance.view",
   "supervision.failedTransactions.view",
   "supervision.holdTickets.view",
+  "supervision.cancelledTickets.view",
   "supervision.b2cEnquiries.view",
   "supervision.setupMarkup.view",
   "supervision.setupCommission.view",

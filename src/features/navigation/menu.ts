@@ -9,6 +9,7 @@ import {
   Inbox,
   MessageSquare,
   Ticket,
+  TicketX,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
 
@@ -77,6 +78,13 @@ export const supervisionMenu: MenuItem[] = [
     href: "/supervision/hold-tickets",
     icon: Ticket,
     required: "supervision.holdTickets.view",
+  },
+  {
+    key: "cancelled-tickets",
+    label: "Cancelled Tickets",
+    href: "/supervision/cancelled-tickets",
+    icon: TicketX,
+    required: "supervision.cancelledTickets.view",
   },
   {
     key: "enquiry",
