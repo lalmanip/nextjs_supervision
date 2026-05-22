@@ -15,6 +15,7 @@ const DEFAULT_PERMISSIONS: Permission[] = [
   "supervision.holdTickets.view",
   "supervision.cancelledTickets.view",
   "supervision.b2cEnquiries.view",
+  "supervision.holidaysEnquiries.view",
   "supervision.holidays.createPackage.view",
   "supervision.setupMarkup.view",
   "supervision.setupCommission.view",

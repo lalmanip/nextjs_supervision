@@ -17,6 +17,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+export type DataTableColumnMeta = {
+  thClassName?: string;
+  tdClassName?: string;
+};
+
 export type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -65,8 +70,13 @@ export function DataTable<TData, TValue>({
           <thead className="bg-zinc-50 dark:bg-zinc-950">
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id} className="border-b border-zinc-200 dark:border-zinc-800">
-                {hg.headers.map((header) => (
-                  <th key={header.id} className="px-3 py-2 text-left font-medium">
+                {hg.headers.map((header) => {
+                  const meta = header.column.columnDef.meta as DataTableColumnMeta | undefined;
+                  return (
+                  <th
+                    key={header.id}
+                    className={cn("px-3 py-2 text-left font-medium align-top", meta?.thClassName)}
+                  >
                     {header.isPlaceholder ? null : header.column.getCanSort() ? (
                       <button
                         type="button"
@@ -90,7 +100,8 @@ export function DataTable<TData, TValue>({
                       flexRender(header.column.columnDef.header, header.getContext())
                     )}
                   </th>
-                ))}
+                  );
+                })}
               </tr>
             ))}
           </thead>
@@ -101,11 +112,17 @@ export function DataTable<TData, TValue>({
                   key={row.id}
                   className="border-b border-zinc-200 last:border-b-0 dark:border-zinc-800"
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-2">
+                  {row.getVisibleCells().map((cell) => {
+                    const meta = cell.column.columnDef.meta as DataTableColumnMeta | undefined;
+                    return (
+                    <td
+                      key={cell.id}
+                      className={cn("px-3 py-2 align-top", meta?.tdClassName)}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
-                  ))}
+                    );
+                  })}
                 </tr>
               ))
             ) : (

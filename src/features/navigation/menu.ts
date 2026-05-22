@@ -12,6 +12,7 @@ import {
   TicketX,
   Palmtree,
   PlusCircle,
+  TreePalm,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
 
@@ -99,6 +100,13 @@ export const supervisionMenu: MenuItem[] = [
         href: "/supervision/b2c-enquiries",
         icon: MessageSquare,
         required: "supervision.b2cEnquiries.view",
+      },
+      {
+        key: "holidays-enquiry",
+        label: "Holidays Enquiry",
+        href: "/supervision/holidays-enquiries",
+        icon: TreePalm,
+        required: "supervision.holidaysEnquiries.view",
       },
     ],
   },

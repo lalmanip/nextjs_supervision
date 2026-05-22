@@ -12,6 +12,30 @@ export type B2cEnquiryRow = {
   message: string;
 };
 
+/** Purpose value routed to Holidays Enquiry (case-insensitive match). */
+export const HOLIDAYS_ENQUIRY_PURPOSE = "holidays packages";
+
+export type EnquiryListSegment = "b2c" | "holidays";
+
+export function getEnquiryPurpose(row: Record<string, unknown>): string {
+  const v = row.purpose ?? row.Purpose;
+  return v == null ? "" : String(v).trim();
+}
+
+export function isHolidaysPackageEnquiry(row: Record<string, unknown>): boolean {
+  return getEnquiryPurpose(row).toLowerCase() === HOLIDAYS_ENQUIRY_PURPOSE;
+}
+
+export function filterEnquiriesBySegment(
+  rows: B2cEnquiryRow[],
+  segment: EnquiryListSegment
+): B2cEnquiryRow[] {
+  return rows.filter((r) => {
+    const isHoliday = isHolidaysPackageEnquiry(r as Record<string, unknown>);
+    return segment === "holidays" ? isHoliday : !isHoliday;
+  });
+}
+
 function camelToSnake(s: string): string {
   return s
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
