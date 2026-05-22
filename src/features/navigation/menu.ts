@@ -10,6 +10,8 @@ import {
   MessageSquare,
   Ticket,
   TicketX,
+  Palmtree,
+  PlusCircle,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
 
@@ -97,6 +99,20 @@ export const supervisionMenu: MenuItem[] = [
         href: "/supervision/b2c-enquiries",
         icon: MessageSquare,
         required: "supervision.b2cEnquiries.view",
+      },
+    ],
+  },
+  {
+    key: "holidays",
+    label: "Holidays",
+    icon: Palmtree,
+    children: [
+      {
+        key: "holidays-create-package",
+        label: "Create Package",
+        href: "/supervision/holidays/create-package",
+        icon: PlusCircle,
+        required: "supervision.holidays.createPackage.view",
       },
     ],
   },

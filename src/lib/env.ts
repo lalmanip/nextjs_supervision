@@ -29,6 +29,11 @@ const serverEnvSchema = z.object({
     .string()
     .min(1)
     .url("MT_REPO_URL must be a valid URL"),
+  /** Holidays service base (POST /api/v1/holidays/admin/packages) */
+  HOLIDAYS_API_URL: z
+    .string()
+    .min(1)
+    .url("HOLIDAYS_API_URL must be a valid URL"),
   NODE_ENV: z.enum(["development", "test", "production"]).optional(),
 });
 
@@ -108,6 +113,15 @@ function resolveMtRepoUrl(): string {
   return "";
 }
 
+function resolveHolidaysApiUrl(): string {
+  const trimmed = process.env.HOLIDAYS_API_URL?.trim();
+  if (trimmed) return trimmed;
+  if (isNonProduction()) {
+    return "http://127.0.0.1:8095";
+  }
+  return "";
+}
+
 export function getServerEnv(): ServerEnv {
   if (cached) return cached;
   const userRepo = resolveUserRepoUrl();
@@ -120,6 +134,7 @@ export function getServerEnv(): ServerEnv {
     AUTH_APP_PASSWORD: resolveAuthLoginPassword(),
     AUTH_APP_SYSTEM: resolveAuthLoginSystem(),
     MT_REPO_URL: resolveMtRepoUrl(),
+    HOLIDAYS_API_URL: resolveHolidaysApiUrl(),
     NODE_ENV: process.env.NODE_ENV,
   });
   return cached;
