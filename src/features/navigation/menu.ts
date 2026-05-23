@@ -12,6 +12,7 @@ import {
   TicketX,
   Palmtree,
   PlusCircle,
+  Pencil,
   TreePalm,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
@@ -121,6 +122,13 @@ export const supervisionMenu: MenuItem[] = [
         href: "/supervision/holidays/create-package",
         icon: PlusCircle,
         required: "supervision.holidays.createPackage.view",
+      },
+      {
+        key: "holidays-update-package",
+        label: "Update Package",
+        href: "/supervision/holidays/update-package",
+        icon: Pencil,
+        required: "supervision.holidays.updatePackage.view",
       },
     ],
   },

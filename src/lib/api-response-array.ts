@@ -30,6 +30,10 @@ export function extractRecordArray(payload: unknown): Record<string, unknown>[] 
     "rows",
     "list",
     "result",
+    "destinations",
+    "categories",
+    "packages",
+    "tourPackages",
   ]) {
     const inner = tryArray(o[key]);
     if (inner) return inner;
@@ -42,7 +46,16 @@ export function extractRecordArray(payload: unknown): Record<string, unknown>[] 
   }
   if (resp && typeof resp === "object" && !Array.isArray(resp)) {
     const r = resp as Record<string, unknown>;
-    for (const key of ["holdTickets", "data", "content", "items"]) {
+    for (const key of [
+      "holdTickets",
+      "data",
+      "content",
+      "items",
+      "destinations",
+      "categories",
+      "packages",
+      "tourPackages",
+    ]) {
       const inner = tryArray(r[key]);
       if (inner) return inner;
     }

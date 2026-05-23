@@ -1,0 +1,718 @@
+"use client";
+
+import * as React from "react";
+import { AxiosError } from "axios";
+import { toast } from "sonner";
+import { http } from "@/services/http";
+import { getApiErrorMessage } from "@/services/http/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import {
+  syncItineraryToPackageDays,
+  WIZARD_STEPS,
+  type HolidayPackageFormState,
+} from "@/types/holiday-package-create";
+import {
+  mapDestinationPackage,
+  mapHolidayCategory,
+  mapHolidayPackageDetailToForm,
+  mapTrendingDestination,
+  type DestinationPackageOption,
+  type HolidayCategoryOption,
+  type HolidayRegion,
+  type TrendingDestinationOption,
+} from "@/types/holiday-package-lookup";
+import {
+  HolidayPackageWizardStepContent,
+  validateHolidayPackageStep,
+} from "../../create-package/widgets/holiday-package-wizard-shared";
+
+const PICK_STEPS = [
+  { id: "region", title: "Region" },
+  { id: "destination", title: "Destination" },
+  { id: "category", title: "Category" },
+  { id: "package", title: "Package" },
+] as const;
+
+type PickStepId = (typeof PICK_STEPS)[number]["id"];
+
+type TrendingApiOk = {
+  status: "success";
+  destinations: Record<string, unknown>[];
+};
+
+type CategoriesApiOk = {
+  status: "success";
+  categories: Record<string, unknown>[];
+};
+
+type PackagesApiOk = {
+  status: "success";
+  packages: Record<string, unknown>[];
+};
+
+type PackageDetailApiOk = {
+  status: "success";
+  data: unknown;
+};
+
+type UpdateApiOk = {
+  status: "success";
+  data: unknown;
+};
+
+type SubmitOutcome = {
+  ok: boolean;
+  message: string;
+  status?: number;
+  response: unknown;
+};
+
+function SelectionList<T extends { key: string }>({
+  items,
+  selectedKey,
+  onSelect,
+  renderLabel,
+  renderMeta,
+}: {
+  items: T[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+  renderLabel: (item: T) => string;
+  renderMeta?: (item: T) => string | undefined;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">No options returned from API.</p>
+    );
+  }
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {items.map((item) => {
+        const selected = selectedKey === item.key;
+        const meta = renderMeta?.(item);
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onSelect(item.key)}
+            className={cn(
+              "rounded-lg border px-4 py-3 text-left transition-colors",
+              selected
+                ? "border-primary bg-primary/5 dark:bg-primary/10"
+                : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+            )}
+          >
+            <span className="block text-sm font-medium">{renderLabel(item)}</span>
+            {meta ? (
+              <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{meta}</span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function UpdateHolidayPackageWizard() {
+  const [phase, setPhase] = React.useState<"pick" | "edit">("pick");
+  const [pickStep, setPickStep] = React.useState(0);
+  const [editStep, setEditStep] = React.useState(0);
+  const [stepError, setStepError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitOutcome, setSubmitOutcome] = React.useState<SubmitOutcome | null>(null);
+
+  const [region, setRegion] = React.useState<HolidayRegion | null>(null);
+  const [destinations, setDestinations] = React.useState<TrendingDestinationOption[]>([]);
+  const [destinationSlug, setDestinationSlug] = React.useState<string | null>(null);
+  const [categories, setCategories] = React.useState<HolidayCategoryOption[]>([]);
+  const [categoryCode, setCategoryCode] = React.useState<string | null>(null);
+  const [packages, setPackages] = React.useState<DestinationPackageOption[]>([]);
+  const [selectedPkgId, setSelectedPkgId] = React.useState<string | null>(null);
+  const [form, setForm] = React.useState<HolidayPackageFormState | null>(null);
+
+  const pickCurrent = PICK_STEPS[pickStep];
+  const editCurrent = WIZARD_STEPS[editStep];
+
+  const selectedDestination = destinations.find((d) => d.slug === destinationSlug);
+  const selectedCategory = categories.find((c) => c.code === categoryCode);
+  const selectedPackage = packages.find((p) => p.pkgId === selectedPkgId);
+
+  const resetAll = () => {
+    setPhase("pick");
+    setPickStep(0);
+    setEditStep(0);
+    setStepError(null);
+    setLoading(false);
+    setSubmitting(false);
+    setSubmitOutcome(null);
+    setRegion(null);
+    setDestinations([]);
+    setDestinationSlug(null);
+    setCategories([]);
+    setCategoryCode(null);
+    setPackages([]);
+    setSelectedPkgId(null);
+    setForm(null);
+  };
+
+  const loadDestinations = async (r: HolidayRegion) => {
+    setLoading(true);
+    setStepError(null);
+    try {
+      const { data } = await http.get<TrendingApiOk>(
+        `/api/supervision/holidays/destinations/trending?region=${r}`
+      );
+      const list = (data.destinations ?? [])
+        .map(mapTrendingDestination)
+        .filter((x): x is TrendingDestinationOption => x !== null);
+      setDestinations(list);
+      if (list.length === 0) {
+        setStepError("No destinations found for this region.");
+      }
+    } catch (e) {
+      setStepError(getApiErrorMessage(e));
+      setDestinations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    setLoading(true);
+    setStepError(null);
+    try {
+      const { data } = await http.get<CategoriesApiOk>(
+        "/api/supervision/holidays/categories"
+      );
+      const list = (data.categories ?? [])
+        .map(mapHolidayCategory)
+        .filter((x): x is HolidayCategoryOption => x !== null);
+      setCategories(list);
+      if (list.length === 0) {
+        setStepError("No categories returned from API.");
+      }
+    } catch (e) {
+      setStepError(getApiErrorMessage(e));
+      setCategories([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPackages = async (slug: string, cat: string) => {
+    setLoading(true);
+    setStepError(null);
+    try {
+      const { data } = await http.get<PackagesApiOk>(
+        `/api/supervision/holidays/destinations/${encodeURIComponent(slug)}/packages?categoryCode=${encodeURIComponent(cat)}`
+      );
+      const list = (data.packages ?? [])
+        .map(mapDestinationPackage)
+        .filter((x): x is DestinationPackageOption => x !== null);
+      setPackages(list);
+      if (list.length === 0) {
+        setStepError("No packages found for this destination and category.");
+      }
+    } catch (e) {
+      setStepError(getApiErrorMessage(e));
+      setPackages([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPackageDetail = async (pkgId: string) => {
+    setLoading(true);
+    setStepError(null);
+    try {
+      const { data } = await http.get<PackageDetailApiOk>(
+        `/api/supervision/holidays/packages/${encodeURIComponent(pkgId)}`
+      );
+      const mapped = mapHolidayPackageDetailToForm(data.data, {
+        region: region ?? undefined,
+        categoryCode: categoryCode ?? selectedPackage?.categoryCode,
+        destinationSlug: destinationSlug ?? undefined,
+        destinationName: selectedDestination?.name,
+        startingPrice: selectedDestination?.startingPrice,
+      });
+      if (!mapped) {
+        setStepError("Could not map package details into the form. Check API response shape.");
+        return;
+      }
+      setForm(mapped);
+      setPhase("edit");
+      setEditStep(0);
+      toast.success(`Loaded ${pkgId}`);
+    } catch (e) {
+      setStepError(getApiErrorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pickNext = async () => {
+    setStepError(null);
+    const id = pickCurrent.id;
+
+    if (id === "region") {
+      if (!region) {
+        setStepError("Select a region.");
+        return;
+      }
+      setDestinationSlug(null);
+      setCategoryCode(null);
+      setPackages([]);
+      setSelectedPkgId(null);
+      await loadDestinations(region);
+      setPickStep(1);
+      return;
+    }
+
+    if (id === "destination") {
+      if (!destinationSlug) {
+        setStepError("Select a destination.");
+        return;
+      }
+      setCategoryCode(null);
+      setPackages([]);
+      setSelectedPkgId(null);
+      await loadCategories();
+      setPickStep(2);
+      return;
+    }
+
+    if (id === "category") {
+      if (!categoryCode || !destinationSlug) {
+        setStepError("Select a category.");
+        return;
+      }
+      setPackages([]);
+      setSelectedPkgId(null);
+      await loadPackages(destinationSlug, categoryCode);
+      setPickStep(3);
+      return;
+    }
+
+    if (id === "package") {
+      if (!selectedPkgId) {
+        setStepError("Select a package to update.");
+        return;
+      }
+      await loadPackageDetail(selectedPkgId);
+    }
+  };
+
+  const pickBack = () => {
+    setStepError(null);
+    if (pickStep === 0) return;
+    setPickStep((s) => s - 1);
+  };
+
+  const patchDestination = (patch: Partial<HolidayPackageFormState["destination"]>) => {
+    setForm((f) => (f ? { ...f, destination: { ...f.destination, ...patch } } : f));
+  };
+
+  const patchPackage = (
+    patch: Partial<Omit<HolidayPackageFormState["tourPackage"], "pricing">> & {
+      pricing?: Partial<HolidayPackageFormState["tourPackage"]["pricing"]>;
+    }
+  ) => {
+    setForm((f) => {
+      if (!f) return f;
+      const nextPackage = {
+        ...f.tourPackage,
+        ...patch,
+        pricing: patch.pricing
+          ? { ...f.tourPackage.pricing, ...patch.pricing }
+          : f.tourPackage.pricing,
+      };
+      if (patch.days !== undefined) {
+        nextPackage.itinerary = syncItineraryToPackageDays(
+          f.tourPackage.itinerary,
+          patch.days
+        );
+      }
+      return { ...f, tourPackage: nextPackage };
+    });
+  };
+
+  const itineraryStepIndex = React.useMemo(
+    () => WIZARD_STEPS.findIndex((s) => s.id === "itinerary"),
+    []
+  );
+
+  React.useEffect(() => {
+    if (phase !== "edit" || !form || editStep !== itineraryStepIndex) return;
+    setForm((f) => {
+      if (!f) return f;
+      return {
+        ...f,
+        tourPackage: {
+          ...f.tourPackage,
+          itinerary: syncItineraryToPackageDays(
+            f.tourPackage.itinerary,
+            f.tourPackage.days
+          ),
+        },
+      };
+    });
+  }, [phase, editStep, itineraryStepIndex]);
+
+  const editGoNext = () => {
+    if (!form) return;
+    const err = validateHolidayPackageStep(editCurrent.id, form);
+    if (err) {
+      setStepError(err);
+      return;
+    }
+    setStepError(null);
+    setEditStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
+  };
+
+  const editGoBack = () => {
+    setStepError(null);
+    setEditStep((s) => Math.max(s - 1, 0));
+  };
+
+  const submitUpdate = async () => {
+    if (!form || !selectedPkgId) return;
+    const err = validateHolidayPackageStep("review", form);
+    if (err) {
+      setStepError(err);
+      return;
+    }
+    setStepError(null);
+    setSubmitting(true);
+    setSubmitOutcome(null);
+    try {
+      const { data, status } = await http.put<UpdateApiOk>(
+        `/api/supervision/holidays/packages/${encodeURIComponent(selectedPkgId)}`,
+        form
+      );
+      const message =
+        (data.data as { message?: string })?.message || "Holiday package updated successfully";
+      setSubmitOutcome({ ok: true, message, status, response: data });
+      toast.success(message);
+    } catch (e) {
+      const ax = e as AxiosError<{ message?: string; data?: unknown }>;
+      const message = getApiErrorMessage(e);
+      setSubmitOutcome({
+        ok: false,
+        message,
+        status: ax.response?.status,
+        response: ax.response?.data ?? { message: ax.message },
+      });
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitOutcome) {
+    return (
+      <Card className={cn(!submitOutcome.ok && "border-red-200 dark:border-red-900")}>
+        <CardHeader>
+          <CardTitle>
+            {submitOutcome.ok ? "Package updated" : "Update package failed"}
+          </CardTitle>
+          {submitOutcome.status ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              HTTP {submitOutcome.status}
+            </p>
+          ) : null}
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <p
+            className={cn(
+              submitOutcome.ok
+                ? "text-zinc-600 dark:text-zinc-400"
+                : "text-red-700 dark:text-red-300"
+            )}
+          >
+            {submitOutcome.message}
+          </p>
+          <pre
+            className={cn(
+              "max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-lg border p-3 text-xs",
+              submitOutcome.ok
+                ? "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+                : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40"
+            )}
+          >
+            {JSON.stringify(submitOutcome.response, null, 2)}
+          </pre>
+          <div className="flex flex-wrap gap-2">
+            {submitOutcome.ok ? (
+              <Button type="button" onClick={resetAll}>
+                Update another package
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSubmitOutcome(null)}
+                >
+                  Back to review &amp; edit
+                </Button>
+                <Button type="button" onClick={resetAll}>
+                  Start over
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (phase === "pick") {
+    const isFirst = pickStep === 0;
+    const isLast = pickStep === PICK_STEPS.length - 1;
+
+    return (
+      <div className="space-y-6">
+        <nav className="flex flex-wrap gap-2">
+          {PICK_STEPS.map((s, i) => (
+            <span
+              key={s.id}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium",
+                i === pickStep
+                  ? "bg-primary text-white"
+                  : i < pickStep
+                    ? "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
+                    : "bg-zinc-100 text-zinc-400 dark:bg-zinc-900"
+              )}
+            >
+              {i + 1}. {s.title}
+            </span>
+          ))}
+        </nav>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{pickCurrent.title}</CardTitle>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Step {pickStep + 1} of {PICK_STEPS.length} — find the package to update
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {stepError ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                {stepError}
+              </p>
+            ) : null}
+
+            {loading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : null}
+
+            {!loading && pickCurrent.id === "region" ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    ["international", "International"],
+                    ["india", "India"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setRegion(value)}
+                    className={cn(
+                      "rounded-lg border px-4 py-3 text-left text-sm font-medium",
+                      region === value
+                        ? "border-primary bg-primary/5 dark:bg-primary/10"
+                        : "border-zinc-200 dark:border-zinc-800"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {!loading && pickCurrent.id === "destination" ? (
+              <SelectionList
+                items={destinations.map((d) => ({ ...d, key: d.slug }))}
+                selectedKey={destinationSlug}
+                onSelect={setDestinationSlug}
+                renderLabel={(d) => d.name}
+                renderMeta={(d) =>
+                  [
+                    d.slug,
+                    d.startingPrice != null ? `from ₹ ${d.startingPrice.toLocaleString("en-IN")}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                }
+              />
+            ) : null}
+
+            {!loading && pickCurrent.id === "category" ? (
+              <SelectionList
+                items={categories.map((c) => ({ ...c, key: c.code }))}
+                selectedKey={categoryCode}
+                onSelect={setCategoryCode}
+                renderLabel={(c) => c.label}
+                renderMeta={(c) => c.code}
+              />
+            ) : null}
+
+            {!loading && pickCurrent.id === "package" ? (
+              <SelectionList
+                items={packages.map((p) => ({ ...p, key: p.pkgId }))}
+                selectedKey={selectedPkgId}
+                onSelect={setSelectedPkgId}
+                renderLabel={(p) => p.title ?? p.pkgId}
+                renderMeta={(p) =>
+                  [
+                    p.pkgId,
+                    p.days != null && p.nights != null
+                      ? `${p.days}D / ${p.nights}N`
+                      : null,
+                    p.price != null ? `₹ ${p.price.toLocaleString("en-IN")}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                }
+              />
+            ) : null}
+
+            {pickStep > 0 && selectedDestination ? (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Destination: {selectedDestination.name} ({selectedDestination.slug})
+                {selectedCategory ? ` · Category: ${selectedCategory.label}` : ""}
+              </p>
+            ) : null}
+
+            <div className="flex justify-between border-t border-zinc-200 pt-4 dark:border-zinc-800">
+              <Button type="button" variant="outline" disabled={isFirst} onClick={pickBack}>
+                Back
+              </Button>
+              <Button type="button" disabled={loading} onClick={() => void pickNext()}>
+                {loading
+                  ? "Loading…"
+                  : isLast
+                    ? "Load package & edit"
+                    : "Next"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!form) {
+    return (
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        Package form not loaded.{" "}
+        <button type="button" className="underline" onClick={resetAll}>
+          Start over
+        </button>
+      </p>
+    );
+  }
+
+  const isEditFirst = editStep === 0;
+  const isEditLast = editStep === WIZARD_STEPS.length - 1;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <p>
+          <span className="font-medium">Updating:</span> {form.tourPackage.title} (
+          {form.tourPackage.pkgId})
+        </p>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          {selectedDestination?.name ?? form.destination.name} ·{" "}
+          {selectedCategory?.label ?? form.tourPackage.categoryCode}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          onClick={resetAll}
+        >
+          Choose a different package
+        </Button>
+      </div>
+
+      <nav className="flex flex-wrap gap-2">
+        {WIZARD_STEPS.map((s, i) => (
+          <button
+            key={s.id}
+            type="button"
+            disabled={i > editStep}
+            onClick={() => i <= editStep && setEditStep(i)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              i === editStep
+                ? "bg-primary text-white"
+                : i < editStep
+                  ? "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
+                  : "bg-zinc-100 text-zinc-400 dark:bg-zinc-900"
+            )}
+          >
+            {i + 1}. {s.title}
+          </button>
+        ))}
+      </nav>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{editCurrent.title}</CardTitle>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Step {editStep + 1} of {WIZARD_STEPS.length}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {stepError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+              {stepError}
+            </p>
+          ) : null}
+
+          <HolidayPackageWizardStepContent
+            stepId={editCurrent.id}
+            form={form}
+            patchDestination={patchDestination}
+            patchPackage={patchPackage}
+            locks={{ pkgId: true }}
+          />
+
+          <div className="flex justify-between border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isEditFirst}
+              onClick={editGoBack}
+            >
+              Back
+            </Button>
+            {isEditLast ? (
+              <Button type="button" disabled={submitting} onClick={() => void submitUpdate()}>
+                {submitting ? "Updating…" : "Update package"}
+              </Button>
+            ) : (
+              <Button type="button" onClick={editGoNext}>
+                Next
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
