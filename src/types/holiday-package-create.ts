@@ -1,18 +1,25 @@
 import { z } from "zod";
 
 const highlightSchema = z.object({
-  highlight: z.string().min(1, "Highlight is required"),
+  highlight: z.string().optional().default(""),
   sortOrder: z.coerce.number().int().min(0),
 });
 
 export const itineraryDaySchema = z.object({
   dayNumber: z.coerce.number().int().min(1),
-  title: z.string().min(1, "Title is required"),
-  description: z.string().min(1, "Description is required"),
+  title: z.string().trim().min(1, "Title is required"),
+  description: z.string().optional().default(""),
   meals: z.string().optional().default(""),
   accommodation: z.string().optional().default(""),
   sortOrder: z.coerce.number().int().min(0),
-  highlights: z.array(highlightSchema).min(1, "Add at least one highlight"),
+  highlights: z
+    .array(highlightSchema)
+    .default([])
+    .transform((rows) =>
+      rows
+        .filter((r) => r.highlight.trim())
+        .map((r) => ({ highlight: r.highlight.trim(), sortOrder: r.sortOrder }))
+    ),
 });
 
 export type ItineraryDayInput = z.infer<typeof itineraryDaySchema>;
@@ -25,7 +32,7 @@ export function createEmptyItineraryDay(dayNumber: number): ItineraryDayInput {
     meals: "",
     accommodation: "",
     sortOrder: dayNumber,
-    highlights: [{ highlight: "", sortOrder: 1 }],
+    highlights: [],
   };
 }
 
@@ -214,19 +221,19 @@ export function buildPackageId(params: {
 }
 
 export const destinationSchema = z.object({
-  slug: z.string().min(1, "Slug is required"),
-  name: z.string().min(1, "Destination name is required"),
+  name: z.string().trim().min(1, "Destination name is required"),
   region: z.enum(["international", "india"]),
   description: z.string().optional().default(""),
   heroImageUrl: z.string().optional().default(""),
-  startingPrice: z.coerce.number().min(0),
+  startingPrice: z.coerce.number().min(1, "Starting price is required"),
   active: z.boolean(),
   sortOrder: z.coerce.number().int().min(0),
+  slug: z.string().min(1, "Destination name is required"),
 });
 
 export const tourPackageBasicsSchema = z.object({
   pkgId: z.string().min(1, "Package ID is required"),
-  slug: z.string().min(1, "Slug is required"),
+  slug: z.string().min(1, "Title is required"),
   categoryCode: z.enum(
     [
       "best-seller",
@@ -238,9 +245,9 @@ export const tourPackageBasicsSchema = z.object({
     ],
     { message: "Select a category" }
   ),
-  title: z.string().min(1, "Title is required"),
+  title: z.string().trim().min(1, "Title is required"),
   imageUrl: z.string().optional().default(""),
-  price: z.coerce.number().min(0),
+  price: z.coerce.number().min(1, "Price is required"),
   days: z.coerce.number().int().min(1),
   nights: z.coerce.number().int().min(0),
   rating: z.coerce.number().min(0).max(5).optional().default(0),

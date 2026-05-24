@@ -20,6 +20,7 @@ export function FormField({
   htmlFor,
   hint,
   error,
+  required,
   children,
   className,
 }: {
@@ -28,13 +29,23 @@ export function FormField({
   /** Grey example text shown beside the label (stays visible while typing). */
   hint?: string;
   error?: string;
+  /** Shows a red asterisk after the label. */
+  required?: boolean;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <Label htmlFor={htmlFor}>{label}</Label>
+        <Label htmlFor={htmlFor}>
+          {label}
+          {required ? (
+            <span className="text-red-600 dark:text-red-400" aria-hidden="true">
+              {" "}
+              *
+            </span>
+          ) : null}
+        </Label>
         {hint ? (
           <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">{hint}</span>
         ) : null}

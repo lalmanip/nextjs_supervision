@@ -13,7 +13,9 @@ import {
 } from "./form-controls";
 import {
   createHolidayPackageSchema,
+  destinationSlugFromName,
   destinationSchema,
+  packageSlugFromTitle,
   pricingSchema,
   tourPackageBasicsSchema,
   validatePackagePriceAboveStartingPrice,
@@ -49,11 +51,24 @@ export function validateHolidayPackageStep(
   };
 
   switch (step) {
-    case "destination":
-      return run(destinationSchema.safeParse(form.destination));
+    case "destination": {
+      const destination = {
+        ...form.destination,
+        slug:
+          form.destination.slug ||
+          destinationSlugFromName(form.destination.name),
+      };
+      return run(destinationSchema.safeParse(destination));
+    }
     case "package": {
       if (options?.packageType !== undefined && !options.packageType.trim()) {
         return "Package type is required";
+      }
+      if (!form.tourPackage.title.trim()) {
+        return "Title is required";
+      }
+      if (!form.tourPackage.price || form.tourPackage.price < 1) {
+        return "Price is required";
       }
       const {
         pkgId,
@@ -74,7 +89,7 @@ export function validateHolidayPackageStep(
       const basicsErr = run(
         tourPackageBasicsSchema.safeParse({
           pkgId,
-          slug,
+          slug: slug || packageSlugFromTitle(title),
           categoryCode,
           title,
           imageUrl,
@@ -109,11 +124,8 @@ export function validateHolidayPackageStep(
         if (day.dayNumber !== day.sortOrder) {
           return "Sort order must match day number.";
         }
-        if (!day.title.trim() || !day.description.trim()) {
-          return `Day ${day.dayNumber}: title and description are required`;
-        }
-        if (day.highlights.length === 0 || !day.highlights[0]?.highlight.trim()) {
-          return `Day ${day.dayNumber}: add at least one highlight`;
+        if (!day.title.trim()) {
+          return `Day ${day.dayNumber}: title is required`;
         }
       }
       return null;
@@ -166,10 +178,12 @@ export function HolidayPackageWizardStepContent({
           label="Destination Name"
           htmlFor="dest-name"
           hint="eg. Mauritius"
+          required
         >
           <input
             id="dest-name"
             className={fieldClass}
+            required
             value={form.destination.name}
             onChange={(e) => patchDestination({ name: e.target.value })}
           />
@@ -189,10 +203,12 @@ export function HolidayPackageWizardStepContent({
             <option value="india">India</option>
           </select>
         </FormField>
-        <FormField label="Starting price" htmlFor="dest-price" hint="eg. 37500">
+        <FormField label="Starting price" htmlFor="dest-price" hint="eg. 37500" required>
           <input
             id="dest-price"
             type="number"
+            required
+            min={1}
             className={fieldClass}
             value={form.destination.startingPrice || ""}
             onChange={(e) =>
@@ -269,11 +285,13 @@ export function HolidayPackageWizardStepContent({
             label="Package Type"
             htmlFor="pkg-packageType"
             hint="eg. Classic, Premium"
+            required
           >
             <input
               id="pkg-packageType"
               list="holiday-package-type-options"
               className={fieldClass}
+              required
               value={packageType ?? ""}
               onChange={(e) => onPackageTypeChange(e.target.value)}
               placeholder="Select or type a package type"
@@ -316,10 +334,12 @@ export function HolidayPackageWizardStepContent({
             label={label}
             htmlFor={`pkg-${key}`}
             hint={"hint" in opts ? opts.hint : undefined}
+            required={key === "title"}
           >
             <input
               id={`pkg-${key}`}
               className={fieldClass}
+              required={key === "title"}
               value={String(form.tourPackage[key as keyof typeof form.tourPackage] ?? "")}
               onChange={(e) =>
                 patchPackage({ [key]: e.target.value } as Partial<typeof form.tourPackage>)
@@ -331,10 +351,12 @@ export function HolidayPackageWizardStepContent({
           label="Price"
           htmlFor="pkg-price"
           hint={`Must be greater than starting price (${form.destination.startingPrice})`}
+          required
         >
           <input
             id="pkg-price"
             type="number"
+            required
             min={form.destination.startingPrice + 1}
             step="0.01"
             className={fieldClass}
@@ -466,9 +488,10 @@ export function HolidayPackageWizardStepContent({
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Title" className="sm:col-span-2">
+              <FormField label="Title" className="sm:col-span-2" required>
                 <input
                   className={fieldClass}
+                  required
                   value={day.title}
                   onChange={(e) => {
                     const next = [...form.tourPackage.itinerary];
