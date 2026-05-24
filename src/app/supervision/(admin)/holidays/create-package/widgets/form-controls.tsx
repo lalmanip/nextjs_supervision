@@ -1,8 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+
+/** Hides native number input spinners (up/down arrows). */
+export const numberInputNoSpinnerClass =
+  "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
 export const fieldClass =
   "flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950";
@@ -36,6 +41,84 @@ export function FormField({
       </div>
       {children}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+export function NumberStepperInput({
+  id,
+  value,
+  onChange,
+  min,
+  max,
+  disabled,
+  "aria-label": ariaLabel,
+}: {
+  id?: string;
+  value: number;
+  onChange: (value: number) => void;
+  min: number;
+  max?: number;
+  disabled?: boolean;
+  "aria-label"?: string;
+}) {
+  const clamp = React.useCallback(
+    (next: number) => {
+      const cappedMax = max != null ? Math.min(max, next) : next;
+      return Math.max(min, cappedMax);
+    },
+    [min, max]
+  );
+
+  const commit = (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isNaN(parsed)) {
+      onChange(min);
+      return;
+    }
+    onChange(clamp(parsed));
+  };
+
+  const decrement = () => onChange(clamp(value - 1));
+  const increment = () => onChange(clamp(value + 1));
+
+  return (
+    <div className="flex items-stretch gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-10 w-10 shrink-0"
+        disabled={disabled || value <= min}
+        aria-label={`Decrease ${ariaLabel ?? "value"}`}
+        onClick={decrement}
+      >
+        −
+      </Button>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        className={cn(fieldClass, numberInputNoSpinnerClass, "text-center")}
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => commit(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-10 w-10 shrink-0"
+        disabled={disabled || (max != null && value >= max)}
+        aria-label={`Increase ${ariaLabel ?? "value"}`}
+        onClick={increment}
+      >
+        +
+      </Button>
     </div>
   );
 }

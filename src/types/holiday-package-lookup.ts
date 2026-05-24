@@ -3,6 +3,7 @@ import {
   createHolidayPackageSchema,
   defaultHolidayPackageFormState,
   holidayPackageCategoryCodes,
+  normalizeDetailSectionType,
   syncItineraryToPackageDays,
   type CreateHolidayPackagePayload,
   type HolidayPackageCategoryCode,
@@ -247,8 +248,8 @@ function mapDetailSectionsFromApi(
   pushStrings("exclusions", details.exclusions);
 
   for (const [key, sectionType] of [
-    ["flightsNote", "flights"],
-    ["visaNote", "visa"],
+    ["flightsNote", "flights_note"],
+    ["visaNote", "visa_note"],
   ] as const) {
     const text = details[key];
     if (typeof text === "string" && text.trim()) {
@@ -297,11 +298,11 @@ function mapFlatPackageDetailToForm(
         .map((row, i) => {
           if (!row || typeof row !== "object") return null;
           const r = row as Record<string, unknown>;
-          const sectionType = pickString(r, ["sectionType", "section_type"]);
+          const sectionTypeRaw = pickString(r, ["sectionType", "section_type"]);
           const content = pickString(r, ["content"]);
-          if (!sectionType || !content) return null;
+          if (!sectionTypeRaw || !content) return null;
           return {
-            sectionType,
+            sectionType: normalizeDetailSectionType(sectionTypeRaw),
             content,
             sortOrder: pickNumber(r, ["sortOrder", "sort_order"]) ?? i + 1,
           };

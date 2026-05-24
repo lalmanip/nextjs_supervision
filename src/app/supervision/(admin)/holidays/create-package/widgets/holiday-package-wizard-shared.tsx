@@ -8,6 +8,7 @@ import {
   CheckboxField,
   fieldClass,
   FormField,
+  NumberStepperInput,
   textareaClass,
 } from "./form-controls";
 import {
@@ -18,7 +19,9 @@ import {
   validatePackagePriceAboveStartingPrice,
   buildInclusionsFromLabels,
   HOLIDAY_PACKAGE_CATEGORY_OPTIONS,
+  HOLIDAY_PACKAGE_DETAIL_SECTION_TYPE_OPTIONS,
   HOLIDAY_PACKAGE_INCLUSION_OPTIONS,
+  HOLIDAY_PACKAGE_TYPE_OPTIONS,
   isInclusionOptionSelected,
   type HolidayPackageCategoryCode,
   type HolidayPackageFormState,
@@ -29,9 +32,14 @@ export type HolidayPackageWizardLocks = {
   pkgId?: boolean;
 };
 
+export type ValidateHolidayPackageStepOptions = {
+  packageType?: string;
+};
+
 export function validateHolidayPackageStep(
   step: WizardStepId,
-  form: HolidayPackageFormState
+  form: HolidayPackageFormState,
+  options?: ValidateHolidayPackageStepOptions
 ): string | null {
   const run = (result: { success: boolean; error?: z.ZodError }) => {
     if (!result.success && result.error) {
@@ -44,6 +52,9 @@ export function validateHolidayPackageStep(
     case "destination":
       return run(destinationSchema.safeParse(form.destination));
     case "package": {
+      if (options?.packageType !== undefined && !options.packageType.trim()) {
+        return "Package type is required";
+      }
       const {
         pkgId,
         slug,
@@ -107,7 +118,14 @@ export function validateHolidayPackageStep(
       }
       return null;
     }
-    case "sections":
+    case "sections": {
+      for (const section of form.tourPackage.detailSections) {
+        if (!section.content.trim()) {
+          return "Each detail section must have content";
+        }
+      }
+      return null;
+    }
     case "hotels":
     case "terms":
       return null;
@@ -126,6 +144,8 @@ export function HolidayPackageWizardStepContent({
   patchDestination,
   patchPackage,
   locks,
+  packageType,
+  onPackageTypeChange,
 }: {
   stepId: WizardStepId;
   form: HolidayPackageFormState;
@@ -136,19 +156,17 @@ export function HolidayPackageWizardStepContent({
     }
   ) => void;
   locks?: HolidayPackageWizardLocks;
+  packageType?: string;
+  onPackageTypeChange?: (value: string) => void;
 }) {
   if (stepId === "destination") {
     return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="Slug" htmlFor="dest-slug" hint="eg. mauritius-tour-packages">
-          <input
-            id="dest-slug"
-            className={fieldClass}
-            value={form.destination.slug}
-            onChange={(e) => patchDestination({ slug: e.target.value })}
-          />
-        </FormField>
-        <FormField label="Name" htmlFor="dest-name" hint="eg. Mauritius Tour Packages">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <FormField
+          label="Destination Name"
+          htmlFor="dest-name"
+          hint="eg. Mauritius"
+        >
           <input
             id="dest-name"
             className={fieldClass}
@@ -193,7 +211,7 @@ export function HolidayPackageWizardStepContent({
             }
           />
         </FormField>
-        <FormField label="Hero image URL" htmlFor="dest-hero">
+        <FormField label="Hero image URL" htmlFor="dest-hero" className="lg:col-span-3">
           <input
             id="dest-hero"
             className={fieldClass}
@@ -201,9 +219,16 @@ export function HolidayPackageWizardStepContent({
             onChange={(e) => patchDestination({ heroImageUrl: e.target.value })}
           />
         </FormField>
+        <div className="flex items-end pb-2">
+          <CheckboxField
+            label="Active"
+            checked={form.destination.active}
+            onChange={(active) => patchDestination({ active })}
+          />
+        </div>
         <FormField
           label="Description"
-          className="sm:col-span-2"
+          className="lg:col-span-4"
           htmlFor="dest-desc"
           hint="eg. Marvelous Mauritius"
         >
@@ -214,18 +239,13 @@ export function HolidayPackageWizardStepContent({
             onChange={(e) => patchDestination({ description: e.target.value })}
           />
         </FormField>
-        <CheckboxField
-          label="Active"
-          checked={form.destination.active}
-          onChange={(active) => patchDestination({ active })}
-        />
       </div>
     );
   }
 
   if (stepId === "package") {
     return (
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <FormField label="Category code" htmlFor="pkg-categoryCode">
           <select
             id="pkg-categoryCode"
@@ -244,11 +264,49 @@ export function HolidayPackageWizardStepContent({
             ))}
           </select>
         </FormField>
+        {onPackageTypeChange ? (
+          <FormField
+            label="Package Type"
+            htmlFor="pkg-packageType"
+            hint="eg. Classic, Premium"
+          >
+            <input
+              id="pkg-packageType"
+              list="holiday-package-type-options"
+              className={fieldClass}
+              value={packageType ?? ""}
+              onChange={(e) => onPackageTypeChange(e.target.value)}
+              placeholder="Select or type a package type"
+            />
+            <datalist id="holiday-package-type-options">
+              {HOLIDAY_PACKAGE_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+            {form.tourPackage.pkgId ? (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Package ID: {form.tourPackage.pkgId}
+              </p>
+            ) : null}
+          </FormField>
+        ) : (
+          <FormField
+            label="Package ID"
+            htmlFor="pkg-pkgId"
+            hint="eg. PKG-MAU-BEST-CLASSIC-001"
+          >
+            <input
+              id="pkg-pkgId"
+              className={fieldClass}
+              disabled={locks?.pkgId}
+              value={form.tourPackage.pkgId}
+              onChange={(e) => patchPackage({ pkgId: e.target.value })}
+            />
+          </FormField>
+        )}
         {(
           [
-            ["pkgId", "Package ID", { hint: "eg. PKG-USA-CLASSIC-001", locked: locks?.pkgId }],
-            ["slug", "Slug", { hint: "eg. america-classic-package" }],
-            ["title", "Title", { hint: "eg. America Classic Package" }],
+            ["title", "Title", { hint: "eg. Mauritius Classic Package" }],
             ["imageUrl", "Image URL", {}],
             ["badge", "Badge", { hint: "eg. Recommended" }],
           ] as const
@@ -262,7 +320,6 @@ export function HolidayPackageWizardStepContent({
             <input
               id={`pkg-${key}`}
               className={fieldClass}
-              disabled={"locked" in opts && opts.locked}
               value={String(form.tourPackage[key as keyof typeof form.tourPackage] ?? "")}
               onChange={(e) =>
                 patchPackage({ [key]: e.target.value } as Partial<typeof form.tourPackage>)
@@ -286,21 +343,21 @@ export function HolidayPackageWizardStepContent({
           />
         </FormField>
         <FormField label="Days" htmlFor="pkg-days">
-          <input
+          <NumberStepperInput
             id="pkg-days"
-            type="number"
-            className={fieldClass}
+            aria-label="Days"
+            min={1}
             value={form.tourPackage.days}
-            onChange={(e) => patchPackage({ days: Number(e.target.value) || 1 })}
+            onChange={(days) => patchPackage({ days })}
           />
         </FormField>
         <FormField label="Nights" htmlFor="pkg-nights">
-          <input
+          <NumberStepperInput
             id="pkg-nights"
-            type="number"
-            className={fieldClass}
+            aria-label="Nights"
+            min={0}
             value={form.tourPackage.nights}
-            onChange={(e) => patchPackage({ nights: Number(e.target.value) || 0 })}
+            onChange={(nights) => patchPackage({ nights })}
           />
         </FormField>
         <FormField label="Rating" htmlFor="pkg-rating">
@@ -331,7 +388,7 @@ export function HolidayPackageWizardStepContent({
             onChange={(e) => patchPackage({ sortOrder: Number(e.target.value) || 0 })}
           />
         </FormField>
-        <div className="flex flex-col gap-2 sm:col-span-2">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 lg:col-span-4">
           <CheckboxField
             label="Has detail page"
             checked={form.tourPackage.hasDetailPage}
@@ -520,18 +577,27 @@ export function HolidayPackageWizardStepContent({
   if (stepId === "sections") {
     return (
       <ArrayEditor
-        emptyItem={{ sectionType: "", content: "", sortOrder: 1 }}
+        emptyItem={{ sectionType: "highlights", content: "", sortOrder: 1 }}
         items={form.tourPackage.detailSections}
         onChange={(detailSections) => patchPackage({ detailSections })}
         renderItem={(item, _i, update, remove) => (
           <div className="grid gap-2 sm:grid-cols-2">
             <FormField label="Section type">
-              <input
+              <select
                 className={fieldClass}
                 value={item.sectionType}
-                onChange={(e) => update({ sectionType: e.target.value })}
-                placeholder="highlights"
-              />
+                onChange={(e) =>
+                  update({
+                    sectionType: e.target.value as typeof item.sectionType,
+                  })
+                }
+              >
+                {HOLIDAY_PACKAGE_DETAIL_SECTION_TYPE_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </FormField>
             <FormField label="Sort order">
               <input

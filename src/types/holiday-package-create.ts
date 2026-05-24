@@ -82,7 +82,10 @@ export function isInclusionOptionSelected(
 }
 
 const detailSectionSchema = z.object({
-  sectionType: z.string().min(1, "Section type is required"),
+  sectionType: z.enum(
+    ["highlights", "inclusions", "exclusions", "flights_note", "visa_note"],
+    { message: "Select a valid section type" }
+  ),
   content: z.string().min(1, "Content is required"),
   sortOrder: z.coerce.number().int().min(0),
 });
@@ -115,9 +118,104 @@ export const holidayPackageCategoryCodes = HOLIDAY_PACKAGE_CATEGORY_OPTIONS.map(
 
 export type HolidayPackageCategoryCode = (typeof HOLIDAY_PACKAGE_CATEGORY_OPTIONS)[number]["code"];
 
+/** Detail section types stored in `holidays_package_detail_sections.section_type`. */
+export const HOLIDAY_PACKAGE_DETAIL_SECTION_TYPE_OPTIONS = [
+  { value: "highlights", label: "Highlights" },
+  { value: "inclusions", label: "Inclusions" },
+  { value: "exclusions", label: "Exclusions" },
+  { value: "flights_note", label: "Flights note" },
+  { value: "visa_note", label: "Visa note" },
+] as const;
+
+export const holidayPackageDetailSectionTypes =
+  HOLIDAY_PACKAGE_DETAIL_SECTION_TYPE_OPTIONS.map((o) => o.value);
+
+export type HolidayPackageDetailSectionType =
+  (typeof HOLIDAY_PACKAGE_DETAIL_SECTION_TYPE_OPTIONS)[number]["value"];
+
+/** Map legacy/API aliases to canonical section types for the admin form. */
+export function normalizeDetailSectionType(
+  sectionType: string
+): HolidayPackageDetailSectionType {
+  const normalized = sectionType.trim().toLowerCase().replace(/\s+/g, "_");
+  if (normalized === "flights") return "flights_note";
+  if (normalized === "visa") return "visa_note";
+  if (
+    (holidayPackageDetailSectionTypes as readonly string[]).includes(normalized)
+  ) {
+    return normalized as HolidayPackageDetailSectionType;
+  }
+  return "highlights";
+}
+
+/** Slugify text for URL segments (lowercase, hyphen-separated). */
+function slugifySegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Build destination slug as `{name}-tour-packages` (kebab-case). */
+export function destinationSlugFromName(destinationName: string): string {
+  const base = slugifySegment(destinationName);
+  if (!base) return "";
+  const namePart = base.replace(/-tour-packages$/, "");
+  return `${namePart}-tour-packages`;
+}
+
+/** Build tour package slug from title (kebab-case). */
+export function packageSlugFromTitle(title: string): string {
+  return slugifySegment(title);
+}
+
+/** Suggested package types for the create wizard (custom values allowed). */
+export const HOLIDAY_PACKAGE_TYPE_OPTIONS = [
+  "Classic",
+  "Premium",
+  "Fully Loaded",
+] as const;
+
+/** First three letters of the destination name (A–Z), padded with X if shorter. */
+export function destinationCodeFromName(destinationName: string): string {
+  const letters = destinationName.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (!letters) return "XXX";
+  return letters.slice(0, 3).padEnd(3, "X");
+}
+
+function packageTypeToIdSegment(packageType: string): string {
+  return packageType.replace(/[^a-zA-Z0-9]/g, "").toUpperCase() || "TYPE";
+}
+
+function categoryCodeToIdSegment(categoryCode: string): string {
+  const primary = categoryCode.split("-")[0] ?? categoryCode;
+  return primary.replace(/[^a-zA-Z0-9]/g, "").toUpperCase() || "GEN";
+}
+
+/**
+ * Build package ID: PKG-{dest3}-{category}-{packageType}-{seq}
+ * e.g. Mauritius + best-seller + Classic → PKG-MAU-BEST-CLASSIC-001
+ * (Category uses the first segment of the category code, e.g. best-seller → BEST.)
+ */
+export function buildPackageId(params: {
+  destinationName: string;
+  categoryCode: string;
+  packageType: string;
+  sequence?: number;
+}): string {
+  const dest = destinationCodeFromName(params.destinationName);
+  const category = categoryCodeToIdSegment(params.categoryCode);
+  const type = packageTypeToIdSegment(params.packageType);
+  const seq = String(params.sequence ?? 1).padStart(3, "0");
+  return `PKG-${dest}-${category}-${type}-${seq}`;
+}
+
 export const destinationSchema = z.object({
   slug: z.string().min(1, "Slug is required"),
-  name: z.string().min(1, "Name is required"),
+  name: z.string().min(1, "Destination name is required"),
   region: z.enum(["international", "india"]),
   description: z.string().optional().default(""),
   heroImageUrl: z.string().optional().default(""),
@@ -213,11 +311,92 @@ export type CreateHolidayPackageResponse = {
 
 export type HolidayPackageFormState = CreateHolidayPackagePayload;
 
-export const defaultHolidayPackageFormState = (): HolidayPackageFormState => ({
+export type HolidayPackageDestinationRegion = HolidayPackageFormState["destination"]["region"];
+
+export function parseHolidayPackageRegionParam(
+  value: string | null | undefined
+): HolidayPackageDestinationRegion | undefined {
+  if (value === "international" || value === "india") return value;
+  return undefined;
+}
+
+export function parseHolidayPackageCategoryParam(
+  value: string | null | undefined
+): HolidayPackageCategoryCode | undefined {
+  const code = value?.trim();
+  if (!code) return undefined;
+  return (holidayPackageCategoryCodes as readonly string[]).includes(code)
+    ? (code as HolidayPackageCategoryCode)
+    : undefined;
+}
+
+export type CreatePackagePrefillParams = {
+  region: HolidayPackageDestinationRegion;
+  destinationSlug: string;
+  destinationName: string;
+  startingPrice?: number;
+  categoryCode: HolidayPackageCategoryCode;
+};
+
+export function buildCreatePackagePrefillUrl(
+  params: CreatePackagePrefillParams
+): string {
+  const q = new URLSearchParams();
+  q.set("region", params.region);
+  q.set("destinationSlug", params.destinationSlug);
+  q.set("destinationName", params.destinationName);
+  if (params.startingPrice != null && !Number.isNaN(params.startingPrice)) {
+    q.set("startingPrice", String(params.startingPrice));
+  }
+  q.set("categoryCode", params.categoryCode);
+  return `/supervision/holidays/create-package?${q.toString()}`;
+}
+
+export function applyCreatePackagePrefillFromSearchParams(
+  searchParams: Pick<URLSearchParams, "get">
+): { form: HolidayPackageFormState; initialStep: number } {
+  const region = parseHolidayPackageRegionParam(searchParams.get("region"));
+  const destinationSlug = searchParams.get("destinationSlug")?.trim() ?? "";
+  const destinationName = searchParams.get("destinationName")?.trim() ?? "";
+  const startingPriceRaw = searchParams.get("startingPrice");
+  const startingPrice =
+    startingPriceRaw != null && startingPriceRaw !== ""
+      ? Number(startingPriceRaw)
+      : undefined;
+  const categoryCode = parseHolidayPackageCategoryParam(searchParams.get("categoryCode"));
+
+  const form = defaultHolidayPackageFormState(region);
+  const destinationPrefilled = Boolean(destinationName || destinationSlug);
+
+  if (destinationName) {
+    form.destination.name = destinationName;
+    form.destination.slug =
+      destinationSlug || destinationSlugFromName(destinationName);
+  } else if (destinationSlug) {
+    form.destination.slug = destinationSlug;
+  }
+
+  if (startingPrice != null && !Number.isNaN(startingPrice)) {
+    form.destination.startingPrice = startingPrice;
+  }
+
+  if (categoryCode) {
+    form.tourPackage.categoryCode = categoryCode;
+  }
+
+  const initialStep =
+    destinationPrefilled && categoryCode ? 1 : 0;
+
+  return { form, initialStep };
+}
+
+export const defaultHolidayPackageFormState = (
+  region?: HolidayPackageDestinationRegion
+): HolidayPackageFormState => ({
   destination: {
     slug: "",
     name: "",
-    region: "international",
+    region: region ?? "international",
     description: "",
     heroImageUrl: "",
     startingPrice: 0,

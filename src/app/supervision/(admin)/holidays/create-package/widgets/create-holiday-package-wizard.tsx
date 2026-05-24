@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 import { http } from "@/services/http";
@@ -9,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  defaultHolidayPackageFormState,
+  applyCreatePackagePrefillFromSearchParams,
+  buildPackageId,
+  destinationSlugFromName,
+  packageSlugFromTitle,
   syncItineraryToPackageDays,
   WIZARD_STEPS,
   type CreateHolidayPackageResponse,
@@ -33,10 +37,17 @@ type SubmitOutcome = {
 };
 
 export default function CreateHolidayPackageWizard() {
-  const [step, setStep] = React.useState(0);
-  const [form, setForm] = React.useState<HolidayPackageFormState>(
-    defaultHolidayPackageFormState
+  const searchParams = useSearchParams();
+  const prefill = React.useMemo(
+    () => applyCreatePackagePrefillFromSearchParams(searchParams),
+    [searchParams]
   );
+
+  const buildInitialForm = React.useCallback(() => prefill.form, [prefill.form]);
+
+  const [step, setStep] = React.useState(prefill.initialStep);
+  const [form, setForm] = React.useState<HolidayPackageFormState>(buildInitialForm);
+  const [packageType, setPackageType] = React.useState("");
   const [stepError, setStepError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitOutcome, setSubmitOutcome] = React.useState<SubmitOutcome | null>(null);
@@ -45,8 +56,40 @@ export default function CreateHolidayPackageWizard() {
   const isFirst = step === 0;
   const isLast = step === WIZARD_STEPS.length - 1;
 
+  const applyGeneratedPackageId = React.useCallback(
+    (state: HolidayPackageFormState, type: string): HolidayPackageFormState => {
+      const trimmedType = type.trim();
+      if (!trimmedType || !state.destination.name.trim()) {
+        return { ...state, tourPackage: { ...state.tourPackage, pkgId: "" } };
+      }
+      return {
+        ...state,
+        tourPackage: {
+          ...state.tourPackage,
+          pkgId: buildPackageId({
+            destinationName: state.destination.name,
+            categoryCode: state.tourPackage.categoryCode,
+            packageType: trimmedType,
+          }),
+        },
+      };
+    },
+    []
+  );
+
   const patchDestination = (patch: Partial<HolidayPackageFormState["destination"]>) => {
-    setForm((f) => ({ ...f, destination: { ...f.destination, ...patch } }));
+    setForm((f) => {
+      const destination = { ...f.destination, ...patch };
+      if (patch.name !== undefined) {
+        destination.slug = destinationSlugFromName(patch.name);
+      }
+      return applyGeneratedPackageId({ ...f, destination }, packageType);
+    });
+  };
+
+  const handlePackageTypeChange = (value: string) => {
+    setPackageType(value);
+    setForm((f) => applyGeneratedPackageId(f, value));
   };
 
   const patchPackage = (
@@ -68,7 +111,14 @@ export default function CreateHolidayPackageWizard() {
           patch.days
         );
       }
-      return { ...f, tourPackage: nextPackage };
+      if (patch.title !== undefined) {
+        nextPackage.slug = packageSlugFromTitle(patch.title);
+      }
+      const next = { ...f, tourPackage: nextPackage };
+      if (patch.categoryCode !== undefined) {
+        return applyGeneratedPackageId(next, packageType);
+      }
+      return next;
     });
   };
 
@@ -92,7 +142,7 @@ export default function CreateHolidayPackageWizard() {
   }, [step, itineraryStepIndex]);
 
   const goNext = () => {
-    const err = validateHolidayPackageStep(current.id, form);
+    const err = validateHolidayPackageStep(current.id, form, { packageType });
     if (err) {
       setStepError(err);
       return;
@@ -107,7 +157,7 @@ export default function CreateHolidayPackageWizard() {
   };
 
   const submit = async () => {
-    const err = validateHolidayPackageStep("review", form);
+    const err = validateHolidayPackageStep("review", form, { packageType });
     if (err) {
       setStepError(err);
       return;
@@ -116,9 +166,28 @@ export default function CreateHolidayPackageWizard() {
     setSubmitting(true);
     setSubmitOutcome(null);
     try {
+      const trimmedPackageType = packageType.trim();
+      const requestBody: HolidayPackageFormState = {
+        ...form,
+        destination: {
+          ...form.destination,
+          slug: destinationSlugFromName(form.destination.name),
+        },
+        tourPackage: {
+          ...form.tourPackage,
+          slug: packageSlugFromTitle(form.tourPackage.title),
+          pkgId: trimmedPackageType
+            ? buildPackageId({
+                destinationName: form.destination.name,
+                categoryCode: form.tourPackage.categoryCode,
+                packageType: trimmedPackageType,
+              })
+            : form.tourPackage.pkgId,
+        },
+      };
       const { data, status } = await http.post<ApiOk>(
         "/api/supervision/holidays/packages",
-        form
+        requestBody
       );
       const payload = data.data ?? data;
       const message =
@@ -148,8 +217,9 @@ export default function CreateHolidayPackageWizard() {
   };
 
   const resetForm = () => {
-    setForm(defaultHolidayPackageFormState());
-    setStep(0);
+    setPackageType("");
+    setForm(buildInitialForm());
+    setStep(prefill.initialStep);
     setSubmitOutcome(null);
     setStepError(null);
   };
@@ -295,6 +365,8 @@ export default function CreateHolidayPackageWizard() {
             form={form}
             patchDestination={patchDestination}
             patchPackage={patchPackage}
+            packageType={packageType}
+            onPackageTypeChange={handlePackageTypeChange}
           />
 
           <div className="flex justify-between border-t border-zinc-200 pt-4 dark:border-zinc-800">

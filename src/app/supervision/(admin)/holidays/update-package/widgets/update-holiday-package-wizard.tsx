@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 import { http } from "@/services/http";
@@ -10,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
+  buildCreatePackagePrefillUrl,
+  parseHolidayPackageCategoryParam,
   syncItineraryToPackageDays,
   WIZARD_STEPS,
   type HolidayPackageFormState,
@@ -125,7 +128,7 @@ export default function UpdateHolidayPackageWizard() {
   const [submitting, setSubmitting] = React.useState(false);
   const [submitOutcome, setSubmitOutcome] = React.useState<SubmitOutcome | null>(null);
 
-  const [region, setRegion] = React.useState<HolidayRegion | null>(null);
+  const [region, setRegion] = React.useState<HolidayRegion | null>("international");
   const [destinations, setDestinations] = React.useState<TrendingDestinationOption[]>([]);
   const [destinationSlug, setDestinationSlug] = React.useState<string | null>(null);
   const [categories, setCategories] = React.useState<HolidayCategoryOption[]>([]);
@@ -141,6 +144,19 @@ export default function UpdateHolidayPackageWizard() {
   const selectedCategory = categories.find((c) => c.code === categoryCode);
   const selectedPackage = packages.find((p) => p.pkgId === selectedPkgId);
 
+  const createPackagePrefillHref = React.useMemo(() => {
+    if (!region || !selectedDestination || !categoryCode) return null;
+    const category = parseHolidayPackageCategoryParam(categoryCode);
+    if (!category) return null;
+    return buildCreatePackagePrefillUrl({
+      region,
+      destinationSlug: selectedDestination.slug,
+      destinationName: selectedDestination.name,
+      startingPrice: selectedDestination.startingPrice,
+      categoryCode: category,
+    });
+  }, [region, selectedDestination, categoryCode]);
+
   const resetAll = () => {
     setPhase("pick");
     setPickStep(0);
@@ -149,7 +165,7 @@ export default function UpdateHolidayPackageWizard() {
     setLoading(false);
     setSubmitting(false);
     setSubmitOutcome(null);
-    setRegion(null);
+    setRegion("international");
     setDestinations([]);
     setDestinationSlug(null);
     setCategories([]);
@@ -214,9 +230,6 @@ export default function UpdateHolidayPackageWizard() {
         .map(mapDestinationPackage)
         .filter((x): x is DestinationPackageOption => x !== null);
       setPackages(list);
-      if (list.length === 0) {
-        setStepError("No packages found for this destination and category.");
-      }
     } catch (e) {
       setStepError(getApiErrorMessage(e));
       setPackages([]);
@@ -542,20 +555,38 @@ export default function UpdateHolidayPackageWizard() {
             ) : null}
 
             {!loading && pickCurrent.id === "destination" ? (
-              <SelectionList
-                items={destinations.map((d) => ({ ...d, key: d.slug }))}
-                selectedKey={destinationSlug}
-                onSelect={setDestinationSlug}
-                renderLabel={(d) => d.name}
-                renderMeta={(d) =>
-                  [
-                    d.slug,
-                    d.startingPrice != null ? `from ₹ ${d.startingPrice.toLocaleString("en-IN")}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
-                }
-              />
+              <div className="space-y-4">
+                <Link
+                  href={`/supervision/holidays/create-package?region=${encodeURIComponent(region ?? "international")}`}
+                  className={cn(
+                    "block rounded-lg border border-dashed px-4 py-3 transition-colors",
+                    "border-primary/50 hover:bg-primary/5 dark:hover:bg-primary/10"
+                  )}
+                >
+                  <span className="block text-sm font-medium text-primary">
+                    Add new destination
+                  </span>
+                  <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
+                    Open create package to set up a new destination and tour package
+                  </span>
+                </Link>
+                <SelectionList
+                  items={destinations.map((d) => ({ ...d, key: d.slug }))}
+                  selectedKey={destinationSlug}
+                  onSelect={setDestinationSlug}
+                  renderLabel={(d) => d.name}
+                  renderMeta={(d) =>
+                    [
+                      d.slug,
+                      d.startingPrice != null
+                        ? `from ₹ ${d.startingPrice.toLocaleString("en-IN")}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  }
+                />
+              </div>
             ) : null}
 
             {!loading && pickCurrent.id === "category" ? (
@@ -569,23 +600,29 @@ export default function UpdateHolidayPackageWizard() {
             ) : null}
 
             {!loading && pickCurrent.id === "package" ? (
-              <SelectionList
-                items={packages.map((p) => ({ ...p, key: p.pkgId }))}
-                selectedKey={selectedPkgId}
-                onSelect={setSelectedPkgId}
-                renderLabel={(p) => p.title ?? p.pkgId}
-                renderMeta={(p) =>
-                  [
-                    p.pkgId,
-                    p.days != null && p.nights != null
-                      ? `${p.days}D / ${p.nights}N`
-                      : null,
-                    p.price != null ? `₹ ${p.price.toLocaleString("en-IN")}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
-                }
-              />
+              packages.length > 0 ? (
+                <SelectionList
+                  items={packages.map((p) => ({ ...p, key: p.pkgId }))}
+                  selectedKey={selectedPkgId}
+                  onSelect={setSelectedPkgId}
+                  renderLabel={(p) => p.title ?? p.pkgId}
+                  renderMeta={(p) =>
+                    [
+                      p.pkgId,
+                      p.days != null && p.nights != null
+                        ? `${p.days}D / ${p.nights}N`
+                        : null,
+                      p.price != null ? `₹ ${p.price.toLocaleString("en-IN")}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  }
+                />
+              ) : (
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  No packages found for this destination and category.
+                </p>
+              )
             ) : null}
 
             {pickStep > 0 && selectedDestination ? (
@@ -595,17 +632,31 @@ export default function UpdateHolidayPackageWizard() {
               </p>
             ) : null}
 
-            <div className="flex justify-between border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
               <Button type="button" variant="outline" disabled={isFirst} onClick={pickBack}>
                 Back
               </Button>
-              <Button type="button" disabled={loading} onClick={() => void pickNext()}>
-                {loading
-                  ? "Loading…"
-                  : isLast
-                    ? "Load package & edit"
-                    : "Next"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {pickCurrent.id === "package" && createPackagePrefillHref ? (
+                  <Button type="button" variant="outline" asChild>
+                    <Link href={createPackagePrefillHref}>Create new package</Link>
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={
+                    loading ||
+                    (isLast && packages.length === 0 && pickCurrent.id === "package")
+                  }
+                  onClick={() => void pickNext()}
+                >
+                  {loading
+                    ? "Loading…"
+                    : isLast
+                      ? "Load package & edit"
+                      : "Next"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
