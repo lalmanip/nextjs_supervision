@@ -27,6 +27,7 @@ export type TrendingDestinationOption = {
   region?: HolidayRegion;
   startingPrice?: number;
   description?: string;
+  active: boolean;
 };
 
 export type HolidayCategoryOption = {
@@ -42,6 +43,16 @@ export type DestinationPackageOption = {
   price?: number;
   days?: number;
   nights?: number;
+  active: boolean;
+};
+
+export type DestinationHeaderOption = {
+  slug: string;
+  name: string;
+  description?: string;
+  heroImageUrl?: string;
+  startingPrice?: number;
+  active: boolean;
 };
 
 export function pickString(
@@ -70,6 +81,19 @@ export function pickNumber(
   return undefined;
 }
 
+export function pickBoolean(
+  row: Record<string, unknown>,
+  keys: string[]
+): boolean | undefined {
+  for (const key of keys) {
+    const v = row[key];
+    if (typeof v === "boolean") return v;
+    if (v === "true" || v === 1 || v === "1") return true;
+    if (v === "false" || v === 0 || v === "0") return false;
+  }
+  return undefined;
+}
+
 export function mapTrendingDestination(
   row: Record<string, unknown>
 ): TrendingDestinationOption | null {
@@ -87,6 +111,7 @@ export function mapTrendingDestination(
     region,
     startingPrice: pickNumber(row, ["startingPrice", "starting_price"]),
     description: pickString(row, ["description"]),
+    active: pickBoolean(row, ["active", "isActive", "is_active"]) ?? true,
   };
 }
 
@@ -105,6 +130,42 @@ export function mapHolidayCategory(
   return { code, label };
 }
 
+export function mapDestinationHeader(
+  row: Record<string, unknown>
+): DestinationHeaderOption | null {
+  const slug = pickString(row, ["slug", "destinationSlug"]);
+  const name = pickString(row, ["name", "destinationName", "title"]);
+  if (!slug || !name) return null;
+  return {
+    slug,
+    name,
+    description: pickString(row, ["description"]),
+    heroImageUrl: pickString(row, ["heroImageUrl", "hero_image_url"]),
+    startingPrice: pickNumber(row, ["startingPrice", "starting_price"]),
+    active: pickBoolean(row, ["active", "isActive", "is_active"]) ?? true,
+  };
+}
+
+export function applyDestinationHeaderToForm(
+  form: HolidayPackageFormState,
+  header: DestinationHeaderOption,
+  region?: HolidayRegion
+): HolidayPackageFormState {
+  return {
+    ...form,
+    destination: {
+      ...form.destination,
+      slug: header.slug,
+      name: header.name,
+      description: header.description ?? form.destination.description,
+      heroImageUrl: header.heroImageUrl ?? form.destination.heroImageUrl,
+      startingPrice: header.startingPrice ?? form.destination.startingPrice,
+      active: header.active,
+      region: region ?? form.destination.region,
+    },
+  };
+}
+
 export function mapDestinationPackage(
   row: Record<string, unknown>
 ): DestinationPackageOption | null {
@@ -118,6 +179,7 @@ export function mapDestinationPackage(
     price: pickNumber(row, ["price"]),
     days: pickNumber(row, ["days"]),
     nights: pickNumber(row, ["nights"]),
+    active: pickBoolean(row, ["active", "isActive", "is_active"]) ?? true,
   };
 }
 

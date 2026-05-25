@@ -22,7 +22,7 @@ export async function GET(req: Request, ctx: RouteContext) {
 
   const res = await proxyHolidaysRequest({
     method: "GET",
-    upstreamPath: `/api/v1/holidays/destinations/${encodeURIComponent(slug)}/packages`,
+    upstreamPath: `/api/v1/holidays/admin/destinations/${encodeURIComponent(slug)}/packages`,
     query: { categoryCode },
     logLabel: "GET holidays destination packages",
   });

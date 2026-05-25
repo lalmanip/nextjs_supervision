@@ -16,6 +16,7 @@ import {
   destinationSlugFromName,
   destinationSchema,
   packageSlugFromTitle,
+  packageTypeFromPkgId,
   pricingSchema,
   tourPackageBasicsSchema,
   validatePackagePriceAboveStartingPrice,
@@ -309,17 +310,25 @@ export function HolidayPackageWizardStepContent({
           </FormField>
         ) : (
           <FormField
-            label="Package ID"
-            htmlFor="pkg-pkgId"
-            hint="eg. PKG-MAU-BEST-CLASSIC-001"
+            label="Package Type"
+            htmlFor="pkg-packageType-readonly"
+            hint="eg. Classic, Premium"
           >
             <input
-              id="pkg-pkgId"
+              id="pkg-packageType-readonly"
               className={fieldClass}
-              disabled={locks?.pkgId}
-              value={form.tourPackage.pkgId}
-              onChange={(e) => patchPackage({ pkgId: e.target.value })}
+              disabled
+              readOnly
+              value={
+                packageTypeFromPkgId(form.tourPackage.pkgId) ||
+                form.tourPackage.pkgId
+              }
             />
+            {form.tourPackage.pkgId ? (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Package ID: {form.tourPackage.pkgId}
+              </p>
+            ) : null}
           </FormField>
         )}
         {(

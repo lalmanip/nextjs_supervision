@@ -220,6 +220,15 @@ export function buildPackageId(params: {
   return `PKG-${dest}-${category}-${type}-${seq}`;
 }
 
+/** Parse display label for package type from PKG-{dest}-{category}-{type}-{seq}. */
+export function packageTypeFromPkgId(pkgId: string): string {
+  const parts = pkgId.trim().split("-").filter(Boolean);
+  if (parts.length < 5 || parts[0].toUpperCase() !== "PKG") return "";
+  const typeSegment = parts[parts.length - 2] ?? "";
+  if (!typeSegment) return "";
+  return typeSegment.charAt(0).toUpperCase() + typeSegment.slice(1).toLowerCase();
+}
+
 export const destinationSchema = z.object({
   name: z.string().trim().min(1, "Destination name is required"),
   region: z.enum(["international", "india"]),

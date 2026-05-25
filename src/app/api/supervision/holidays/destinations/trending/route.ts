@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
   const res = await proxyHolidaysRequest({
     method: "GET",
-    upstreamPath: "/api/v1/holidays/destinations/trending",
+    upstreamPath: "/api/v1/holidays/admin/destinations/trending",
     query: { region },
     logLabel: "GET holidays destinations trending",
   });

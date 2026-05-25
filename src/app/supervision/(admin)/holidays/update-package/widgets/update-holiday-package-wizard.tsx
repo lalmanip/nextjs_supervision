@@ -18,6 +18,8 @@ import {
   type HolidayPackageFormState,
 } from "@/types/holiday-package-create";
 import {
+  applyDestinationHeaderToForm,
+  mapDestinationHeader,
   mapDestinationPackage,
   mapHolidayCategory,
   mapHolidayPackageDetailToForm,
@@ -56,6 +58,11 @@ type PackagesApiOk = {
   packages: Record<string, unknown>[];
 };
 
+type DestinationApiOk = {
+  status: "success";
+  destination: Record<string, unknown>;
+};
+
 type PackageDetailApiOk = {
   status: "success";
   data: unknown;
@@ -73,24 +80,49 @@ type SubmitOutcome = {
   response: unknown;
 };
 
+type SelectionListTone = "default" | "active" | "inactive";
+
+const selectionListToneClass: Record<
+  SelectionListTone,
+  { base: string; selected: string }
+> = {
+  default: {
+    base: "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900",
+    selected: "border-primary bg-primary/5 dark:bg-primary/10",
+  },
+  active: {
+    base: "border-green-300 bg-green-50 hover:bg-green-100/80 dark:border-green-800 dark:bg-green-950/40 dark:hover:bg-green-950/60",
+    selected:
+      "border-green-600 bg-green-100 ring-1 ring-green-600/30 dark:border-green-500 dark:bg-green-950/70 dark:ring-green-500/30",
+  },
+  inactive: {
+    base: "border-red-300 bg-red-50 hover:bg-red-100/80 dark:border-red-800 dark:bg-red-950/40 dark:hover:bg-red-950/60",
+    selected:
+      "border-red-600 bg-red-100 ring-1 ring-red-600/30 dark:border-red-500 dark:bg-red-950/70 dark:ring-red-500/30",
+  },
+};
+
 function SelectionList<T extends { key: string }>({
   items,
   selectedKey,
   onSelect,
   renderLabel,
   renderMeta,
+  tone = "default",
 }: {
   items: T[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
   renderLabel: (item: T) => string;
   renderMeta?: (item: T) => string | undefined;
+  tone?: SelectionListTone;
 }) {
   if (items.length === 0) {
     return (
       <p className="text-sm text-zinc-600 dark:text-zinc-400">No options returned from API.</p>
     );
   }
+  const toneClass = selectionListToneClass[tone];
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {items.map((item) => {
@@ -103,9 +135,7 @@ function SelectionList<T extends { key: string }>({
             onClick={() => onSelect(item.key)}
             className={cn(
               "rounded-lg border px-4 py-3 text-left transition-colors",
-              selected
-                ? "border-primary bg-primary/5 dark:bg-primary/10"
-                : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              selected ? toneClass.selected : toneClass.base
             )}
           >
             <span className="block text-sm font-medium">{renderLabel(item)}</span>
@@ -141,6 +171,40 @@ export default function UpdateHolidayPackageWizard() {
   const editCurrent = WIZARD_STEPS[editStep];
 
   const selectedDestination = destinations.find((d) => d.slug === destinationSlug);
+  const activeDestinations = React.useMemo(
+    () => destinations.filter((d) => d.active),
+    [destinations]
+  );
+  const inactiveDestinations = React.useMemo(
+    () => destinations.filter((d) => !d.active),
+    [destinations]
+  );
+  const activePackages = React.useMemo(
+    () => packages.filter((p) => p.active),
+    [packages]
+  );
+  const inactivePackages = React.useMemo(
+    () => packages.filter((p) => !p.active),
+    [packages]
+  );
+
+  const renderDestinationMeta = (d: TrendingDestinationOption) =>
+    [
+      d.slug,
+      d.startingPrice != null
+        ? `from ₹ ${d.startingPrice.toLocaleString("en-IN")}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const renderPackageMeta = (p: DestinationPackageOption) =>
+    [
+      p.pkgId,
+      p.days != null && p.nights != null ? `${p.days}D / ${p.nights}N` : null,
+      p.price != null ? `₹ ${p.price.toLocaleString("en-IN")}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   const selectedCategory = categories.find((c) => c.code === categoryCode);
   const selectedPackage = packages.find((p) => p.pkgId === selectedPkgId);
 
@@ -238,25 +302,40 @@ export default function UpdateHolidayPackageWizard() {
     }
   };
 
+  const loadDestinationDetail = async (slug: string) => {
+    const { data } = await http.get<DestinationApiOk>(
+      `/api/supervision/holidays/destinations/${encodeURIComponent(slug)}`
+    );
+    return mapDestinationHeader(data.destination ?? {});
+  };
+
   const loadPackageDetail = async (pkgId: string) => {
     setLoading(true);
     setStepError(null);
     try {
-      const { data } = await http.get<PackageDetailApiOk>(
-        `/api/supervision/holidays/packages/${encodeURIComponent(pkgId)}`
-      );
-      const mapped = mapHolidayPackageDetailToForm(data.data, {
+      const slug = destinationSlug ?? undefined;
+      const [packageRes, destinationHeader] = await Promise.all([
+        http.get<PackageDetailApiOk>(
+          `/api/supervision/holidays/packages/${encodeURIComponent(pkgId)}`
+        ),
+        slug ? loadDestinationDetail(slug).catch(() => null) : Promise.resolve(null),
+      ]);
+      const mapped = mapHolidayPackageDetailToForm(packageRes.data.data, {
         region: region ?? undefined,
         categoryCode: categoryCode ?? selectedPackage?.categoryCode,
-        destinationSlug: destinationSlug ?? undefined,
-        destinationName: selectedDestination?.name,
-        startingPrice: selectedDestination?.startingPrice,
+        destinationSlug: slug,
+        destinationName: destinationHeader?.name ?? selectedDestination?.name,
+        startingPrice:
+          destinationHeader?.startingPrice ?? selectedDestination?.startingPrice,
       });
       if (!mapped) {
         setStepError("Could not map package details into the form. Check API response shape.");
         return;
       }
-      setForm(mapped);
+      const withDestination = destinationHeader
+        ? applyDestinationHeaderToForm(mapped, destinationHeader, region ?? undefined)
+        : mapped;
+      setForm(withDestination);
       setPhase("edit");
       setEditStep(0);
       toast.success(`Loaded ${pkgId}`);
@@ -570,22 +649,41 @@ export default function UpdateHolidayPackageWizard() {
                     Open create package to set up a new destination and tour package
                   </span>
                 </Link>
-                <SelectionList
-                  items={destinations.map((d) => ({ ...d, key: d.slug }))}
-                  selectedKey={destinationSlug}
-                  onSelect={setDestinationSlug}
-                  renderLabel={(d) => d.name}
-                  renderMeta={(d) =>
-                    [
-                      d.slug,
-                      d.startingPrice != null
-                        ? `from ₹ ${d.startingPrice.toLocaleString("en-IN")}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  }
-                />
+                {activeDestinations.length > 0 ? (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-green-700 dark:text-green-400">
+                      Active destinations
+                    </h3>
+                    <SelectionList
+                      tone="active"
+                      items={activeDestinations.map((d) => ({ ...d, key: d.slug }))}
+                      selectedKey={destinationSlug}
+                      onSelect={setDestinationSlug}
+                      renderLabel={(d) => d.name}
+                      renderMeta={renderDestinationMeta}
+                    />
+                  </section>
+                ) : null}
+                {inactiveDestinations.length > 0 ? (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
+                      Inactive destinations
+                    </h3>
+                    <SelectionList
+                      tone="inactive"
+                      items={inactiveDestinations.map((d) => ({ ...d, key: d.slug }))}
+                      selectedKey={destinationSlug}
+                      onSelect={setDestinationSlug}
+                      renderLabel={(d) => d.name}
+                      renderMeta={renderDestinationMeta}
+                    />
+                  </section>
+                ) : null}
+                {destinations.length === 0 ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    No destinations returned from API.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -600,29 +698,43 @@ export default function UpdateHolidayPackageWizard() {
             ) : null}
 
             {!loading && pickCurrent.id === "package" ? (
-              packages.length > 0 ? (
-                <SelectionList
-                  items={packages.map((p) => ({ ...p, key: p.pkgId }))}
-                  selectedKey={selectedPkgId}
-                  onSelect={setSelectedPkgId}
-                  renderLabel={(p) => p.title ?? p.pkgId}
-                  renderMeta={(p) =>
-                    [
-                      p.pkgId,
-                      p.days != null && p.nights != null
-                        ? `${p.days}D / ${p.nights}N`
-                        : null,
-                      p.price != null ? `₹ ${p.price.toLocaleString("en-IN")}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  }
-                />
-              ) : (
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  No packages found for this destination and category.
-                </p>
-              )
+              <div className="space-y-4">
+                {activePackages.length > 0 ? (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-green-700 dark:text-green-400">
+                      Active packages
+                    </h3>
+                    <SelectionList
+                      tone="active"
+                      items={activePackages.map((p) => ({ ...p, key: p.pkgId }))}
+                      selectedKey={selectedPkgId}
+                      onSelect={setSelectedPkgId}
+                      renderLabel={(p) => p.title ?? p.pkgId}
+                      renderMeta={renderPackageMeta}
+                    />
+                  </section>
+                ) : null}
+                {inactivePackages.length > 0 ? (
+                  <section className="space-y-2">
+                    <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">
+                      Inactive packages
+                    </h3>
+                    <SelectionList
+                      tone="inactive"
+                      items={inactivePackages.map((p) => ({ ...p, key: p.pkgId }))}
+                      selectedKey={selectedPkgId}
+                      onSelect={setSelectedPkgId}
+                      renderLabel={(p) => p.title ?? p.pkgId}
+                      renderMeta={renderPackageMeta}
+                    />
+                  </section>
+                ) : null}
+                {packages.length === 0 ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                    No packages found for this destination and category.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             {pickStep > 0 && selectedDestination ? (
