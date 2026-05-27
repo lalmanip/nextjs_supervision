@@ -6,15 +6,25 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { http } from "@/services/http";
 import { getApiErrorMessage } from "@/services/http/client";
+import { AdminNotesCell } from "@/components/common/admin-notes-cell";
 import { DataTable } from "@/components/common/data-table";
+import { EnquiryStatusCell } from "@/components/common/enquiry-status-cell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isoDateColumnSortingFn } from "@/lib/date-column-sort";
 import {
+  getB2cEnquiryAdminNotes,
+  getB2cEnquiryRowId,
+  getB2cEnquiryStatus,
+  isB2cEnquiryAdminNotesColumn,
+  isB2cEnquiryStatusColumn,
+} from "@/lib/b2c-enquiry-row-fields";
+import {
   B2C_ENQUIRY_TABLE_COLUMNS,
   filterEnquiriesBySegment,
   type B2cEnquiryRow,
+  type B2cEnquiryStatus,
   type EnquiryListSegment,
 } from "@/types/b2c-enquiry";
 
@@ -22,6 +32,21 @@ type ApiOk = {
   status: "success";
   enquiries: B2cEnquiryRow[];
   raw?: unknown;
+};
+
+type SaveAdminApiOk = {
+  status: "success";
+};
+
+type AdminEditOptions = {
+  notesEditingId: number | null;
+  statusEditingId: number | null;
+  saving: boolean;
+  onEditNotes: (id: number) => void;
+  onEditStatus: (id: number) => void;
+  onCancel: () => void;
+  onSaveNotes: (id: number, value: string | null) => void;
+  onSaveStatus: (id: number, status: B2cEnquiryStatus) => void;
 };
 
 const SEGMENT_COPY: Record<
@@ -92,7 +117,10 @@ function renderCell(key: string, value: unknown) {
   return formatCell(key, value);
 }
 
-function buildColumns(rows: B2cEnquiryRow[]): ColumnDef<B2cEnquiryRow>[] {
+function buildColumns(
+  rows: B2cEnquiryRow[],
+  adminEdit?: AdminEditOptions
+): ColumnDef<B2cEnquiryRow>[] {
   if (rows.length === 0) return [];
   const present = new Set<string>();
   for (const row of rows) {
@@ -102,11 +130,51 @@ function buildColumns(rows: B2cEnquiryRow[]): ColumnDef<B2cEnquiryRow>[] {
   const cols: ColumnDef<B2cEnquiryRow>[] = [];
   const dateSort = isoDateColumnSortingFn<B2cEnquiryRow>();
 
+  const statusCell = (row: B2cEnquiryRow, rowId: number): React.ReactNode => {
+    if (!adminEdit) {
+      return renderCell("status", getB2cEnquiryStatus(row as Record<string, unknown>));
+    }
+    return (
+      <EnquiryStatusCell
+        status={getB2cEnquiryStatus(row as Record<string, unknown>)}
+        isEditing={adminEdit.statusEditingId === rowId}
+        saving={adminEdit.saving}
+        onStartEdit={() => adminEdit.onEditStatus(rowId)}
+        onCancel={adminEdit.onCancel}
+        onSave={(value) => adminEdit.onSaveStatus(rowId, value)}
+      />
+    );
+  };
+
+  const adminNotesCell = (row: B2cEnquiryRow, rowId: number): React.ReactNode => {
+    if (!adminEdit) {
+      return renderCell(
+        "adminNotes",
+        getB2cEnquiryAdminNotes(row as Record<string, unknown>)
+      );
+    }
+    return (
+      <AdminNotesCell
+        notes={getB2cEnquiryAdminNotes(row as Record<string, unknown>)}
+        isEditing={adminEdit.notesEditingId === rowId}
+        saving={adminEdit.saving}
+        onStartEdit={() => adminEdit.onEditNotes(rowId)}
+        onCancel={adminEdit.onCancel}
+        onSave={(value) =>
+          adminEdit.onSaveNotes(rowId, value.trim() === "" ? null : value)
+        }
+      />
+    );
+  };
+
   for (const { keys, label } of B2C_ENQUIRY_TABLE_COLUMNS) {
     const found = keys.find((k) => present.has(k));
     if (!found) continue;
     const isEnqDate = label === "Enquiry date";
     const isMessage = label === "Message" || isMessageFieldKey(found);
+    const isStatus = label === "Status" || isB2cEnquiryStatusColumn(found);
+    const isAdminNotes =
+      label === "Admin notes" || isB2cEnquiryAdminNotesColumn(found);
     cols.push({
       id: found,
       accessorKey: found as keyof B2cEnquiryRow & string,
@@ -120,17 +188,29 @@ function buildColumns(rows: B2cEnquiryRow[]): ColumnDef<B2cEnquiryRow>[] {
             },
           }
         : {}),
-      cell: ({ row }) =>
-        renderCell(found, (row.original as Record<string, unknown>)[found]),
+      cell: ({ row }) => {
+        const rowId = getB2cEnquiryRowId(row.original as Record<string, unknown>);
+        if (isStatus && rowId !== null) return statusCell(row.original, rowId);
+        if (isAdminNotes && rowId !== null) {
+          return adminNotesCell(row.original, rowId);
+        }
+        return renderCell(found, (row.original as Record<string, unknown>)[found]);
+      },
     });
     present.delete(found);
   }
 
   for (const key of [...present].sort()) {
     const isMessage = isMessageFieldKey(key);
+    const isStatus = isB2cEnquiryStatusColumn(key);
+    const isAdminNotes = isB2cEnquiryAdminNotesColumn(key);
     cols.push({
       accessorKey: key as keyof B2cEnquiryRow & string,
-      header: formatHeader(key),
+      header: isStatus
+        ? "Status"
+        : isAdminNotes
+          ? "Admin notes"
+          : formatHeader(key),
       ...(isMessage
         ? {
             meta: {
@@ -139,8 +219,45 @@ function buildColumns(rows: B2cEnquiryRow[]): ColumnDef<B2cEnquiryRow>[] {
             },
           }
         : {}),
-      cell: ({ row }) =>
-        renderCell(key, (row.original as Record<string, unknown>)[key]),
+      cell: ({ row }) => {
+        const rowId = getB2cEnquiryRowId(row.original as Record<string, unknown>);
+        if (isStatus && rowId !== null) return statusCell(row.original, rowId);
+        if (isAdminNotes && rowId !== null) {
+          return adminNotesCell(row.original, rowId);
+        }
+        return renderCell(key, (row.original as Record<string, unknown>)[key]);
+      },
+    });
+  }
+
+  const hasStatusCol = cols.some((c) => c.header === "Status");
+  const hasAdminNotesCol = cols.some((c) => c.header === "Admin notes");
+
+  if (adminEdit && !hasStatusCol) {
+    cols.push({
+      id: "status",
+      accessorKey: "status" as keyof B2cEnquiryRow & string,
+      header: "Status",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const rowId = getB2cEnquiryRowId(row.original as Record<string, unknown>);
+        if (rowId === null) return "—";
+        return statusCell(row.original, rowId);
+      },
+    });
+  }
+
+  if (adminEdit && !hasAdminNotesCol) {
+    cols.push({
+      id: "admin_notes",
+      accessorKey: "admin_notes" as keyof B2cEnquiryRow & string,
+      header: "Admin notes",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const rowId = getB2cEnquiryRowId(row.original as Record<string, unknown>);
+        if (rowId === null) return "—";
+        return adminNotesCell(row.original, rowId);
+      },
     });
   }
 
@@ -152,6 +269,9 @@ export default function EnquiriesListClient({ segment }: { segment: EnquiryListS
   const [loading, setLoading] = React.useState(true);
   const [allRows, setAllRows] = React.useState<B2cEnquiryRow[]>([]);
   const [rawFallback, setRawFallback] = React.useState<unknown>(null);
+  const [notesEditingId, setNotesEditingId] = React.useState<number | null>(null);
+  const [statusEditingId, setStatusEditingId] = React.useState<number | null>(null);
+  const [savingAdmin, setSavingAdmin] = React.useState(false);
 
   const rows = React.useMemo(
     () => filterEnquiriesBySegment(allRows, segment),
@@ -178,7 +298,88 @@ export default function EnquiriesListClient({ segment }: { segment: EnquiryListS
     void load();
   }, [load]);
 
-  const columns = React.useMemo(() => buildColumns(rows), [rows]);
+  const cancelAdminEdit = React.useCallback(() => {
+    setNotesEditingId(null);
+    setStatusEditingId(null);
+    setSavingAdmin(false);
+  }, []);
+
+  const onEditNotes = React.useCallback((id: number) => {
+    setStatusEditingId(null);
+    setNotesEditingId(id);
+  }, []);
+
+  const onEditStatus = React.useCallback((id: number) => {
+    setNotesEditingId(null);
+    setStatusEditingId(id);
+  }, []);
+
+  const onSaveNotes = React.useCallback(
+    async (id: number, value: string | null) => {
+      if (savingAdmin) return;
+      setSavingAdmin(true);
+      try {
+        await http.put<SaveAdminApiOk>(
+          `/api/supervision/b2c-enquiry/${encodeURIComponent(String(id))}/admin`,
+          { adminNotes: value }
+        );
+        toast.success(
+          value === null ? "Admin notes cleared" : "Admin notes updated"
+        );
+        cancelAdminEdit();
+        await load();
+      } catch (e) {
+        toast.error(getApiErrorMessage(e));
+        setSavingAdmin(false);
+      }
+    },
+    [cancelAdminEdit, load, savingAdmin]
+  );
+
+  const onSaveStatus = React.useCallback(
+    async (id: number, status: B2cEnquiryStatus) => {
+      if (savingAdmin) return;
+      setSavingAdmin(true);
+      try {
+        await http.put<SaveAdminApiOk>(
+          `/api/supervision/b2c-enquiry/${encodeURIComponent(String(id))}/admin`,
+          { status }
+        );
+        toast.success("Status updated");
+        cancelAdminEdit();
+        await load();
+      } catch (e) {
+        toast.error(getApiErrorMessage(e));
+        setSavingAdmin(false);
+      }
+    },
+    [cancelAdminEdit, load, savingAdmin]
+  );
+
+  const columns = React.useMemo(
+    () =>
+      buildColumns(rows, {
+        notesEditingId,
+        statusEditingId,
+        saving: savingAdmin,
+        onEditNotes,
+        onEditStatus,
+        onCancel: cancelAdminEdit,
+        onSaveNotes,
+        onSaveStatus,
+      }),
+    [
+      rows,
+      notesEditingId,
+      statusEditingId,
+      savingAdmin,
+      onEditNotes,
+      onEditStatus,
+      cancelAdminEdit,
+      onSaveNotes,
+      onSaveStatus,
+    ]
+  );
 
   return (
     <div className="space-y-6">

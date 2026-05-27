@@ -18,6 +18,27 @@ export function getHoldTicketRowId(row: HoldTicketLoose): string {
   return String(v);
 }
 
+const HOLD_TICKET_ADMIN_NOTES_KEYS = [
+  "admin_notes",
+  "adminNotes",
+  "Admin_Notes",
+  "AdminNotes",
+] as const;
+
+export function isHoldTicketAdminNotesColumn(key: string): boolean {
+  const lower = key.toLowerCase();
+  return HOLD_TICKET_ADMIN_NOTES_KEYS.some((k) => k.toLowerCase() === lower);
+}
+
+export function getHoldTicketAdminNotes(row: HoldTicketLoose): string | null {
+  for (const key of HOLD_TICKET_ADMIN_NOTES_KEYS) {
+    const v = row[key];
+    if (typeof v === "string") return v;
+    if (v === null) return null;
+  }
+  return null;
+}
+
 export function getHoldTicketReleaseFields(row: HoldTicketLoose): {
   bookingId: string;
   source: string;

@@ -10,11 +10,21 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  type Column,
   type SortingState,
+  type VisibilityState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowDownUp, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowDownUp, ArrowUp, Columns2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 
 export type DataTableColumnMeta = {
@@ -29,6 +39,19 @@ export type DataTableProps<TData, TValue> = {
   searchPlaceholder?: string;
 };
 
+function columnPickerLabel<TData, TValue>(column: Column<TData, TValue>): string {
+  const header = column.columnDef.header;
+  if (typeof header === "string" && header.trim()) return header.trim();
+  const key = column.columnDef.accessorKey;
+  if (typeof key === "string" && key.trim()) {
+    return key
+      .replace(/_/g, " ")
+      .replace(/^./, (s) => s.toUpperCase())
+      .trim();
+  }
+  return column.id;
+}
+
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -37,28 +60,63 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
 
   const table = useReactTable({
     data,
     columns,
-    state: { globalFilter, sorting },
+    state: { globalFilter, sorting, columnVisibility },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
 
+  const hideableColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
+  const visibleColumnCount = Math.max(1, table.getVisibleLeafColumns().length);
+
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           value={globalFilter ?? ""}
           onChange={(e) => setGlobalFilter(e.target.value)}
           placeholder={searchPlaceholder}
           className="max-w-sm"
         />
+        {hideableColumns.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm" className="gap-1.5">
+                <Columns2 className="h-4 w-4" aria-hidden />
+                Columns
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                Show or hide columns
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <div className="max-h-72 overflow-y-auto">
+                {hideableColumns.map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="font-normal"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {columnPickerLabel(column)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <div className="flex-1" />
         <div className="text-xs text-zinc-500 dark:text-zinc-400">
           {table.getFilteredRowModel().rows.length} rows
@@ -127,7 +185,7 @@ export function DataTable<TData, TValue>({
               ))
             ) : (
               <tr>
-                <td className="px-3 py-6 text-center text-zinc-500 dark:text-zinc-400" colSpan={columns.length}>
+                <td className="px-3 py-6 text-center text-zinc-500 dark:text-zinc-400" colSpan={visibleColumnCount}>
                   No results.
                 </td>
               </tr>

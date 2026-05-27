@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { http } from "@/services/http";
 import { getApiErrorMessage } from "@/services/http/client";
+import { AdminNotesCell } from "@/components/common/admin-notes-cell";
 import { DataTable } from "@/components/common/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,11 @@ type ApiOk = {
   status: "success";
   failedBookings: FailedBookingRecoveryRow[];
   raw?: unknown;
+};
+
+type SaveNotesApiOk = {
+  status: "success";
+  data: unknown;
 };
 
 const LONG_PREVIEW = 120;
@@ -43,7 +49,15 @@ function formatCell(key: string, v: unknown): string {
   return s;
 }
 
-function buildColumns(rows: FailedBookingRecoveryRow[]): ColumnDef<FailedBookingRecoveryRow>[] {
+function buildColumns(options: {
+  rows: FailedBookingRecoveryRow[];
+  editingId: number | null;
+  saving: boolean;
+  onEdit: (id: number) => void;
+  onCancel: () => void;
+  onSave: (id: number, value: string) => void;
+}): ColumnDef<FailedBookingRecoveryRow>[] {
+  const { rows, editingId, saving, onEdit, onCancel, onSave } = options;
   if (rows.length === 0) return [];
   const present = new Set<string>();
   for (const row of rows) {
@@ -57,7 +71,23 @@ function buildColumns(rows: FailedBookingRecoveryRow[]): ColumnDef<FailedBooking
     cols.push({
       accessorKey: key,
       header: label,
-      cell: ({ row }) => formatCell(key, row.getValue(key)),
+      cell: ({ row }) => {
+        if (key !== "admin_notes") {
+          return formatCell(key, row.getValue(key));
+        }
+
+        const id = row.original.id;
+        return (
+          <AdminNotesCell
+            notes={row.original.admin_notes}
+            isEditing={editingId === id}
+            saving={saving}
+            onStartEdit={() => onEdit(id)}
+            onCancel={onCancel}
+            onSave={(value) => onSave(id, value)}
+          />
+        );
+      },
     });
     present.delete(key);
   }
@@ -81,6 +111,8 @@ export default function FailedTransactionsClient() {
   const [loading, setLoading] = React.useState(true);
   const [rows, setRows] = React.useState<FailedBookingRecoveryRow[]>([]);
   const [rawFallback, setRawFallback] = React.useState<unknown>(null);
+  const [editingId, setEditingId] = React.useState<number | null>(null);
+  const [savingNotes, setSavingNotes] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -105,7 +137,49 @@ export default function FailedTransactionsClient() {
     void load();
   }, [load]);
 
-  const columns = React.useMemo(() => buildColumns(rows), [rows]);
+  const cancelEdit = React.useCallback(() => {
+    setEditingId(null);
+    setSavingNotes(false);
+  }, []);
+
+  const onEdit = React.useCallback((id: number) => {
+    setEditingId(id);
+  }, []);
+
+  const onSave = React.useCallback(
+    async (id: number, value: string) => {
+      if (savingNotes) return;
+      setSavingNotes(true);
+      try {
+        await http.put<SaveNotesApiOk>(
+          `/api/supervision/flight-booking/failed-booking-recovery/${encodeURIComponent(
+            String(id)
+          )}/admin-notes`,
+          { adminNotes: value }
+        );
+        toast.success("Admin notes updated");
+        cancelEdit();
+        await load();
+      } catch (e) {
+        toast.error(getApiErrorMessage(e));
+        setSavingNotes(false);
+      }
+    },
+    [cancelEdit, load, savingNotes]
+  );
+
+  const columns = React.useMemo(
+    () =>
+      buildColumns({
+        rows,
+        editingId,
+        saving: savingNotes,
+        onEdit,
+        onCancel: cancelEdit,
+        onSave,
+      }),
+    [rows, editingId, savingNotes, onEdit, cancelEdit, onSave]
+  );
 
   return (
     <div className="space-y-6">

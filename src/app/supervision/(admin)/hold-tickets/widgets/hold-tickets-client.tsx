@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { http } from "@/services/http";
 import { getApiErrorMessage } from "@/services/http/client";
+import { AdminNotesCell } from "@/components/common/admin-notes-cell";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable } from "@/components/common/data-table";
 import { Button } from "@/components/ui/button";
@@ -18,8 +19,10 @@ import {
 } from "@/types/hold-ticket";
 import type { TboReleasePnrUpstream } from "@/types/tbo-release-pnr";
 import {
+  getHoldTicketAdminNotes,
   getHoldTicketReleaseFields,
   getHoldTicketRowId,
+  isHoldTicketAdminNotesColumn,
   type HoldTicketLoose,
 } from "@/lib/hold-ticket-row-fields";
 import { holdTicketLastTicketDateSortingFn } from "@/lib/hold-ticket-sort";
@@ -29,6 +32,18 @@ type ApiOk = {
   /** Parsed from API `{ response: HoldTicketRow[], status, message }` */
   holdTickets: HoldTicketRow[];
   raw?: unknown;
+};
+
+type SaveNotesApiOk = {
+  status: "success";
+};
+
+type AdminNotesEditOptions = {
+  editingId: string | null;
+  saving: boolean;
+  onEdit: (rowId: string) => void;
+  onCancel: () => void;
+  onSave: (rowId: string, value: string) => void;
 };
 
 function formatHeader(key: string): string {
@@ -45,7 +60,10 @@ function formatCell(v: unknown): string {
   return String(v);
 }
 
-function buildHoldTicketColumns(rows: HoldTicketRow[]): ColumnDef<HoldTicketRow>[] {
+function buildHoldTicketColumns(
+  rows: HoldTicketRow[],
+  adminNotesEdit?: AdminNotesEditOptions
+): ColumnDef<HoldTicketRow>[] {
   if (rows.length === 0) return [];
   const present = new Set<string>();
   for (const row of rows) {
@@ -56,27 +74,73 @@ function buildHoldTicketColumns(rows: HoldTicketRow[]): ColumnDef<HoldTicketRow>
 
   const cols: ColumnDef<HoldTicketRow>[] = [];
 
+  const adminNotesCell = (
+    row: HoldTicketRow,
+    rowId: string
+  ): React.ReactNode => {
+    if (!adminNotesEdit || !rowId) {
+      return formatCell(getHoldTicketAdminNotes(row as HoldTicketLoose));
+    }
+    return (
+      <AdminNotesCell
+        notes={getHoldTicketAdminNotes(row as HoldTicketLoose)}
+        isEditing={adminNotesEdit.editingId === rowId}
+        saving={adminNotesEdit.saving}
+        onStartEdit={() => adminNotesEdit.onEdit(rowId)}
+        onCancel={adminNotesEdit.onCancel}
+        onSave={(value) => adminNotesEdit.onSave(rowId, value)}
+      />
+    );
+  };
+
   for (const { keys, label } of HOLD_TICKET_TABLE_COLUMNS) {
     const found = keys.find((k) => present.has(k));
     if (!found) continue;
     const isLastTicketDate = label === "Last Ticket Date";
+    const isAdminNotes =
+      label === "Admin notes" || isHoldTicketAdminNotesColumn(found);
     cols.push({
       id: found,
       accessorKey: found as keyof HoldTicketRow & string,
       header: label,
       ...(isLastTicketDate ? { sortingFn: holdTicketLastTicketDateSortingFn } : {}),
-      cell: ({ row }) =>
-        formatCell((row.original as Record<string, unknown>)[found]),
+      cell: ({ row }) => {
+        if (isAdminNotes) {
+          const rowId = getHoldTicketRowId(row.original as HoldTicketLoose);
+          return adminNotesCell(row.original, rowId);
+        }
+        return formatCell((row.original as Record<string, unknown>)[found]);
+      },
     });
     present.delete(found);
   }
 
   for (const key of [...present].sort()) {
+    const isAdminNotes = isHoldTicketAdminNotesColumn(key);
     cols.push({
       accessorKey: key as keyof HoldTicketRow & string,
-      header: formatHeader(key),
-      cell: ({ row }) =>
-        formatCell((row.original as Record<string, unknown>)[key]),
+      header: isAdminNotes ? "Admin notes" : formatHeader(key),
+      cell: ({ row }) => {
+        if (isAdminNotes) {
+          const rowId = getHoldTicketRowId(row.original as HoldTicketLoose);
+          return adminNotesCell(row.original, rowId);
+        }
+        return formatCell((row.original as Record<string, unknown>)[key]);
+      },
+    });
+  }
+
+  const hasAdminNotesCol = cols.some((c) => c.header === "Admin notes");
+  if (adminNotesEdit && !hasAdminNotesCol) {
+    cols.push({
+      id: "admin_notes",
+      accessorKey: "admin_notes" as keyof HoldTicketRow & string,
+      header: "Admin notes",
+      enableSorting: false,
+      cell: ({ row }) => {
+        const rowId = getHoldTicketRowId(row.original as HoldTicketLoose);
+        return adminNotesCell(row.original, rowId);
+      },
     });
   }
 
@@ -153,6 +217,35 @@ export default function HoldTicketsClient() {
 
   const [selectedRowId, setSelectedRowId] = React.useState<string | null>(null);
   const [releaseRow, setReleaseRow] = React.useState<HoldTicketRow | null>(null);
+  const [notesEditingId, setNotesEditingId] = React.useState<string | null>(null);
+  const [savingNotes, setSavingNotes] = React.useState(false);
+
+  const cancelNotesEdit = React.useCallback(() => {
+    setNotesEditingId(null);
+    setSavingNotes(false);
+  }, []);
+
+  const onSaveNotes = React.useCallback(
+    async (rowId: string, value: string) => {
+      if (savingNotes) return;
+      setSavingNotes(true);
+      try {
+        await http.put<SaveNotesApiOk>(
+          `/api/supervision/flight-booking/hold-tickets/${encodeURIComponent(
+            rowId
+          )}/admin-notes`,
+          { adminNotes: value }
+        );
+        toast.success("Admin notes updated");
+        cancelNotesEdit();
+        await load();
+      } catch (e) {
+        toast.error(getApiErrorMessage(e));
+        setSavingNotes(false);
+      }
+    },
+    [cancelNotesEdit, load, savingNotes]
+  );
 
   const selectedRow = React.useMemo(
     () =>
@@ -168,7 +261,17 @@ export default function HoldTicketsClient() {
     }
   }, [rows, selectedRowId]);
 
-  const baseColumns = React.useMemo(() => buildHoldTicketColumns(rows), [rows]);
+  const baseColumns = React.useMemo(
+    () =>
+      buildHoldTicketColumns(rows, {
+        editingId: notesEditingId,
+        saving: savingNotes,
+        onEdit: setNotesEditingId,
+        onCancel: cancelNotesEdit,
+        onSave: onSaveNotes,
+      }),
+    [rows, notesEditingId, savingNotes, cancelNotesEdit, onSaveNotes]
+  );
 
   const columns = React.useMemo<ColumnDef<HoldTicketRow>[]>(() => {
     if (baseColumns.length === 0) return [];

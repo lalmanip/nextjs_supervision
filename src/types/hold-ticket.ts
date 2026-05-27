@@ -129,6 +129,10 @@ export const HOLD_TICKET_TABLE_COLUMNS: HoldTicketColumnSpec[] = [
   { keys: K("fareClassification"), label: "Fare class." },
   { keys: K("supplierFareClasses"), label: "Supplier fare cls" },
   { keys: K("remarks"), label: "Remarks" },
+  {
+    keys: [...K("adminNotes"), "admin_notes", "Admin_Notes", "AdminNotes"],
+    label: "Admin notes",
+  },
   { keys: K("airlineRemark"), label: "Airline remark" },
   { keys: K("invoiceNo"), label: "Invoice #" },
   { keys: K("invoiceAmount"), label: "Invoice amt" },
