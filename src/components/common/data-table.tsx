@@ -42,7 +42,8 @@ export type DataTableProps<TData, TValue> = {
 function columnPickerLabel<TData, TValue>(column: Column<TData, TValue>): string {
   const header = column.columnDef.header;
   if (typeof header === "string" && header.trim()) return header.trim();
-  const key = column.columnDef.accessorKey;
+  const def = column.columnDef as unknown as { accessorKey?: unknown };
+  const key = def.accessorKey;
   if (typeof key === "string" && key.trim()) {
     return key
       .replace(/_/g, " ")

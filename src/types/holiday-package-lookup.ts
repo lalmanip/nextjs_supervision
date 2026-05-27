@@ -291,12 +291,15 @@ function mapHotelsFromApi(raw: unknown): {
 
 function mapDetailSectionsFromApi(
   details: Record<string, unknown> | undefined
-): { sectionType: string; content: string; sortOrder: number }[] {
+): HolidayPackageFormState["tourPackage"]["detailSections"] {
   if (!details) return [];
-  const sections: { sectionType: string; content: string; sortOrder: number }[] = [];
+  const sections: HolidayPackageFormState["tourPackage"]["detailSections"] = [];
   let sortOrder = 1;
 
-  const pushStrings = (sectionType: string, values: unknown) => {
+  const pushStrings = (
+    sectionType: HolidayPackageFormState["tourPackage"]["detailSections"][number]["sectionType"],
+    values: unknown
+  ) => {
     if (!Array.isArray(values)) return;
     for (const v of values) {
       if (typeof v === "string" && v.trim()) {

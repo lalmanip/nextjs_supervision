@@ -90,7 +90,7 @@ export function isInclusionOptionSelected(
 
 const detailSectionSchema = z.object({
   sectionType: z.enum(
-    ["highlights", "inclusions", "exclusions", "flights_note", "visa_note"],
+    ["highlights", "inclusions", "exclusions", "flights_note", "visa_note"] as const,
     { message: "Select a valid section type" }
   ),
   content: z.string().min(1, "Content is required"),

@@ -608,7 +608,7 @@ export function HolidayPackageWizardStepContent({
 
   if (stepId === "sections") {
     return (
-      <ArrayEditor
+      <ArrayEditor<HolidayPackageFormState["tourPackage"]["detailSections"][number]>
         emptyItem={{ sectionType: "highlights", content: "", sortOrder: 1 }}
         items={form.tourPackage.detailSections}
         onChange={(detailSections) => patchPackage({ detailSections })}
