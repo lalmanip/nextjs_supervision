@@ -134,7 +134,7 @@ function buildColumns(
   return cols;
 }
 
-export default function TopUpRequestClient() {
+export default function PendingRequestClient() {
   const authUser = useAuthStore((s) => s.user);
   const [loading, setLoading] = React.useState(true);
   const [rows, setRows] = React.useState<B2bWalletRequestRow[]>([]);
@@ -325,7 +325,7 @@ export default function TopUpRequestClient() {
         <ModalContent>
           <ModalHeader>
             <ModalTitle>
-              {confirmKind === "approve" ? "Approve top-up" : "Reject top-up"}
+              {confirmKind === "approve" ? "Approve request" : "Reject request"}
             </ModalTitle>
             <ModalDescription>
               {confirmRow
