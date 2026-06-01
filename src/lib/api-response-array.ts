@@ -22,6 +22,8 @@ export function extractRecordArray(payload: unknown): Record<string, unknown>[] 
 
   for (const key of [
     "response",
+    "pendingActivations",
+    "walletRequests",
     "holdTickets",
     "data",
     "content",
@@ -47,6 +49,8 @@ export function extractRecordArray(payload: unknown): Record<string, unknown>[] 
   if (resp && typeof resp === "object" && !Array.isArray(resp)) {
     const r = resp as Record<string, unknown>;
     for (const key of [
+      "pendingActivations",
+      "walletRequests",
       "holdTickets",
       "data",
       "content",

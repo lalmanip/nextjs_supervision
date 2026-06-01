@@ -14,6 +14,9 @@ import {
   PlusCircle,
   Pencil,
   TreePalm,
+  Users,
+  UserPlus,
+  Wallet,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
 
@@ -89,6 +92,27 @@ export const supervisionMenu: MenuItem[] = [
     href: "/supervision/cancelled-tickets",
     icon: TicketX,
     required: "supervision.cancelledTickets.view",
+  },
+  {
+    key: "agent",
+    label: "Agent",
+    icon: Users,
+    children: [
+      {
+        key: "agent-new-registration",
+        label: "New Registration",
+        href: "/supervision/agent/new-registration",
+        icon: UserPlus,
+        required: "supervision.agent.newRegistration.view",
+      },
+      {
+        key: "agent-top-up-request",
+        label: "Pending Request",
+        href: "/supervision/agent/top-up-request",
+        icon: Wallet,
+        required: "supervision.agent.topUpRequest.view",
+      },
+    ],
   },
   {
     key: "enquiry",
