@@ -11,6 +11,7 @@ import {
   sanitizeHeaders,
 } from "@/lib/api-debug";
 import { extractUserSessionToken } from "@/lib/user-service-token";
+import { normalizeSupervisionUser } from "@/lib/supervision-user-id";
 
 const AUTH_COOKIE = "sv_token";
 
@@ -144,9 +145,13 @@ export async function POST(req: Request) {
       maxAge,
     });
 
+    const rawUser =
+      (data as { response?: unknown })?.response ??
+      (data as { user?: unknown })?.user ??
+      null;
     const jsonBody = {
       status: "success" as const,
-      user: (data as any)?.response ?? (data as any)?.user ?? null,
+      user: normalizeSupervisionUser(rawUser),
     };
 
     if (isServerApiDebugEnabled()) {

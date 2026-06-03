@@ -7,8 +7,9 @@ import { ChevronDown, ChevronLeft, ChevronRight, LogOut, UserRoundCog } from "lu
 import { cn } from "@/lib/utils";
 import { supervisionMenu, type MenuItem } from "@/features/navigation/menu";
 import { useRbacStore } from "@/features/rbac/rbac.store";
-import { logoutSuperAdmin } from "@/features/auth/auth.api";
+import { fetchAuthMe, logoutSuperAdmin } from "@/features/auth/auth.api";
 import { useAuthStore } from "@/features/auth/auth.store";
+import { resolveSupervisionUserId } from "@/lib/supervision-user-id";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -97,7 +98,30 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = React.useState(false);
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const clear = useAuthStore((s) => s.clear);
+
+  React.useEffect(() => {
+    if (resolveSupervisionUserId(user)) return;
+    let cancelled = false;
+    void fetchAuthMe()
+      .then((res) => {
+        if (cancelled) return;
+        const userId = resolveSupervisionUserId(res.user);
+        if (!userId) return;
+        setUser({
+          ...(user ?? {}),
+          ...(res.user ?? {}),
+          userId,
+        });
+      })
+      .catch(() => {
+        /* session cookie may be missing on public routes */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, setUser]);
 
   React.useEffect(() => {
     // Reset nested open states when collapsing/expanding

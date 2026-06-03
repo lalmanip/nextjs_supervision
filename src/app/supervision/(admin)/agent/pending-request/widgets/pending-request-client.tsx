@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { http } from "@/services/http";
 import { getApiErrorMessage } from "@/services/http/client";
 import { useAuthStore } from "@/features/auth/auth.store";
+import { resolveSupervisionUserId } from "@/lib/supervision-user-id";
 import {
   Modal,
   ModalContent,
@@ -17,7 +18,6 @@ import {
 import { DataTable } from "@/components/common/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -144,17 +144,8 @@ export default function PendingRequestClient() {
     action: PendingAction;
     row: B2bWalletRequestRow;
   } | null>(null);
-  const [reviewedByUserId, setReviewedByUserId] = React.useState<number>(
-    authUser?.userId ?? 1
-  );
   const [remarks, setRemarks] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
-
-  React.useEffect(() => {
-    if (authUser?.userId) {
-      setReviewedByUserId(authUser.userId);
-    }
-  }, [authUser?.userId]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -190,7 +181,7 @@ export default function PendingRequestClient() {
         return;
       }
       if (!payload.reviewedByUserId || payload.reviewedByUserId <= 0) {
-        toast.error("Reviewed-by user id is required.");
+        toast.error("Logged-in user id is unavailable. Sign in again.");
         return;
       }
       setActingId(requestId);
@@ -226,12 +217,9 @@ export default function PendingRequestClient() {
   const openReview = React.useCallback(
     (action: PendingAction, row: B2bWalletRequestRow) => {
       setRemarks("");
-      if (authUser?.userId) {
-        setReviewedByUserId(authUser.userId);
-      }
       setConfirmAction({ action, row });
     },
-    [authUser?.userId]
+    []
   );
 
   const onApprove = React.useCallback(
@@ -337,19 +325,6 @@ export default function PendingRequestClient() {
           </ModalHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="reviewedByUserId">Reviewed by user ID</Label>
-              <Input
-                id="reviewedByUserId"
-                type="number"
-                min={1}
-                value={reviewedByUserId}
-                onChange={(e) =>
-                  setReviewedByUserId(Number(e.target.value) || 0)
-                }
-                disabled={submitting}
-              />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="walletRequestRemarks">Remarks</Label>
               <textarea
                 id="walletRequestRemarks"
@@ -380,11 +355,12 @@ export default function PendingRequestClient() {
               <Button
                 type="button"
                 variant={confirmKind === "reject" ? "destructive" : "default"}
-                disabled={submitting || reviewedByUserId <= 0}
+                disabled={submitting}
                 onClick={() => {
                   if (!confirmAction) return;
+                  const reviewerId = resolveSupervisionUserId(authUser);
                   void runAction(confirmAction.action, confirmAction.row, {
-                    reviewedByUserId,
+                    reviewedByUserId: reviewerId ?? 0,
                     remarks,
                   });
                 }}

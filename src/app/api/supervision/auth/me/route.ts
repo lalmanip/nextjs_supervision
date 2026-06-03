@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { safeDecodeJwt } from "@/lib/auth";
 import {
+  getUserIdFromJwt,
+  normalizeSupervisionUser,
+} from "@/lib/supervision-user-id";
+import {
   isServerApiDebugEnabled,
   logApiDebug,
   sanitizeForLog,
@@ -39,7 +43,19 @@ export async function GET(req: Request) {
   }
 
   const decoded = safeDecodeJwt(token);
-  const body = { status: "success" as const, token: { decoded } };
+  const jwtUser = normalizeSupervisionUser(decoded);
+  const userId = getUserIdFromJwt(decoded);
+  const user =
+    jwtUser && userId
+      ? { ...jwtUser, userId }
+      : userId
+        ? { userId }
+        : jwtUser;
+  const body = {
+    status: "success" as const,
+    user,
+    token: { decoded },
+  };
   if (isServerApiDebugEnabled()) {
     logApiDebug("route:GET /api/supervision/auth/me (response)", {
       status: 200,

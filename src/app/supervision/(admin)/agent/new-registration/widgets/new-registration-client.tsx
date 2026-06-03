@@ -69,14 +69,26 @@ type BuildColumnOptions = {
   onDismissAwaiting?: (userOid: number) => void;
 };
 
+function parseAwaitingRows(raw: string): B2bPendingActivationRow[] {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((r) => r && typeof r === "object") as B2bPendingActivationRow[];
+}
+
 function loadAwaitingFromStorage(): B2bPendingActivationRow[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.sessionStorage.getItem(AWAITING_WALLET_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((r) => r && typeof r === "object") as B2bPendingActivationRow[];
+    const raw = window.localStorage.getItem(AWAITING_WALLET_STORAGE_KEY);
+    if (raw) return parseAwaitingRows(raw);
+
+    const legacy = window.sessionStorage.getItem(AWAITING_WALLET_STORAGE_KEY);
+    if (!legacy) return [];
+    const rows = parseAwaitingRows(legacy);
+    if (rows.length > 0) {
+      window.localStorage.setItem(AWAITING_WALLET_STORAGE_KEY, legacy);
+      window.sessionStorage.removeItem(AWAITING_WALLET_STORAGE_KEY);
+    }
+    return rows;
   } catch {
     return [];
   }
@@ -84,7 +96,7 @@ function loadAwaitingFromStorage(): B2bPendingActivationRow[] {
 
 function saveAwaitingToStorage(rows: B2bPendingActivationRow[]) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(AWAITING_WALLET_STORAGE_KEY, JSON.stringify(rows));
+  window.localStorage.setItem(AWAITING_WALLET_STORAGE_KEY, JSON.stringify(rows));
 }
 
 function rowIdentityKey(row: B2bPendingActivationRow): string {
@@ -274,7 +286,7 @@ export default function NewRegistrationClient() {
   const [pendingRows, setPendingRows] = React.useState<B2bPendingActivationRow[]>([]);
   const [awaitingWalletRows, setAwaitingWalletRows] = React.useState<
     B2bPendingActivationRow[]
-  >([]);
+  >(loadAwaitingFromStorage);
   const [rawFallback, setRawFallback] = React.useState<unknown>(null);
   const [statusEditingId, setStatusEditingId] = React.useState<number | null>(null);
   const [savingStatus, setSavingStatus] = React.useState(false);
@@ -289,12 +301,13 @@ export default function NewRegistrationClient() {
     authUser?.userId ?? 1
   );
   const [lastWallet, setLastWallet] = React.useState<B2bWalletSnapshot | null>(null);
+  const awaitingWalletHydrated = React.useRef(false);
 
   React.useEffect(() => {
-    setAwaitingWalletRows(loadAwaitingFromStorage());
-  }, []);
-
-  React.useEffect(() => {
+    if (!awaitingWalletHydrated.current) {
+      awaitingWalletHydrated.current = true;
+      return;
+    }
     saveAwaitingToStorage(awaitingWalletRows);
   }, [awaitingWalletRows]);
 
