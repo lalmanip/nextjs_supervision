@@ -36,6 +36,7 @@ import {
   type B2bPendingActivationRow,
 } from "@/types/b2b-pending-activation";
 import type { B2bWalletSnapshot } from "@/types/b2b-wallet-initialize";
+import { AgentRegistrationReviewModal } from "@/components/agent/agent-registration-review-modal";
 
 const AWAITING_WALLET_STORAGE_KEY = "supervision.b2bAwaitingWalletInit";
 
@@ -67,6 +68,7 @@ type BuildColumnOptions = {
   onSaveStatus: (id: number, status: string) => void;
   onInitialize: (row: B2bPendingActivationRow) => void;
   onDismissAwaiting?: (userOid: number) => void;
+  onReview?: (row: B2bPendingActivationRow) => void;
 };
 
 function parseAwaitingRows(raw: string): B2bPendingActivationRow[] {
@@ -152,6 +154,7 @@ function buildColumns(
     onSaveStatus,
     onInitialize,
     onDismissAwaiting,
+    onReview,
   } = options;
 
   const present = new Set<string>();
@@ -230,6 +233,24 @@ function buildColumns(
     });
   }
 
+  if (mode === "pending" && onReview) {
+    cols.push({
+      id: "review",
+      header: "Review",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => onReview(row.original)}
+        >
+          View &amp; approve
+        </Button>
+      ),
+    });
+  }
+
   cols.push({
     id: "wallet",
     header: "Wallet",
@@ -301,6 +322,7 @@ export default function NewRegistrationClient() {
     authUser?.userId ?? 1
   );
   const [lastWallet, setLastWallet] = React.useState<B2bWalletSnapshot | null>(null);
+  const [reviewRow, setReviewRow] = React.useState<B2bPendingActivationRow | null>(null);
   const awaitingWalletHydrated = React.useRef(false);
 
   React.useEffect(() => {
@@ -379,6 +401,7 @@ export default function NewRegistrationClient() {
         await load();
       } catch (e) {
         toast.error(getApiErrorMessage(e));
+      } finally {
         setSavingStatus(false);
       }
     },
@@ -448,6 +471,19 @@ export default function NewRegistrationClient() {
     removeFromAwaiting,
   ]);
 
+  const openReview = React.useCallback((row: B2bPendingActivationRow) => {
+    setReviewRow(row);
+  }, []);
+
+  const reviewUserOid = reviewRow ? getB2bPendingActivationUserOid(reviewRow) : null;
+  const reviewRowId = reviewRow ? getB2bPendingActivationRowId(reviewRow) : null;
+
+  const approveFromReview = React.useCallback(async () => {
+    if (reviewRowId === null) return;
+    await onSaveStatus(reviewRowId, "1");
+    setReviewRow(null);
+  }, [onSaveStatus, reviewRowId]);
+
   const columnOptions: BuildColumnOptions = {
     mode: "pending",
     statusEditingId,
@@ -457,6 +493,7 @@ export default function NewRegistrationClient() {
     onCancelStatus: cancelStatusEdit,
     onSaveStatus,
     onInitialize: openInitialize,
+    onReview: openReview,
   };
 
   const pendingColumns = React.useMemo(
@@ -611,6 +648,16 @@ export default function NewRegistrationClient() {
           )}
         </CardContent>
       </Card>
+
+      <AgentRegistrationReviewModal
+        open={reviewRow !== null}
+        userOid={reviewUserOid}
+        summaryLabel={reviewRow ? pendingActivationSummary(reviewRow) : ""}
+        canApprove
+        approving={savingStatus}
+        onClose={() => setReviewRow(null)}
+        onApprove={() => void approveFromReview()}
+      />
 
       <Modal
         open={initRow !== null}
