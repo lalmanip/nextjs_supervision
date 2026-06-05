@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Vivance Supervision",
   description: "SuperAdmin portal for Vivance platform",
+  icons: {
+    icon: "/vivance-logo.png",
+    shortcut: "/vivance-logo.png",
+    apple: "/vivance-logo.png",
+  },
 };
 
 export default function RootLayout({

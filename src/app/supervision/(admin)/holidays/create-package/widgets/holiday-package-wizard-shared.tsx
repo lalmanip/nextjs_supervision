@@ -3,6 +3,7 @@
 import * as React from "react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { HolidayImageUploadField } from "@/components/common/holiday-image-upload-field";
 import { cn } from "@/lib/utils";
 import {
   CheckboxField,
@@ -228,14 +229,15 @@ export function HolidayPackageWizardStepContent({
             }
           />
         </FormField>
-        <FormField label="Hero image URL" htmlFor="dest-hero" className="lg:col-span-3">
-          <input
-            id="dest-hero"
-            className={fieldClass}
-            value={form.destination.heroImageUrl}
-            onChange={(e) => patchDestination({ heroImageUrl: e.target.value })}
-          />
-        </FormField>
+        <HolidayImageUploadField
+          id="dest-hero"
+          label="Hero image"
+          kind="destination-hero"
+          className="lg:col-span-3"
+          hint="Upload a photo or paste a URL. Saved packages use this for the destination hero on vivance_ui."
+          value={form.destination.heroImageUrl}
+          onChange={(heroImageUrl) => patchDestination({ heroImageUrl })}
+        />
         <div className="flex items-end pb-2">
           <CheckboxField
             label="Active"
@@ -331,31 +333,37 @@ export function HolidayPackageWizardStepContent({
             ) : null}
           </FormField>
         )}
-        {(
-          [
-            ["title", "Title", { hint: "eg. Mauritius Classic Package" }],
-            ["imageUrl", "Image URL", {}],
-            ["badge", "Badge", { hint: "eg. Recommended" }],
-          ] as const
-        ).map(([key, label, opts]) => (
-          <FormField
-            key={key}
-            label={label}
-            htmlFor={`pkg-${key}`}
-            hint={"hint" in opts ? opts.hint : undefined}
-            required={key === "title"}
-          >
-            <input
-              id={`pkg-${key}`}
-              className={fieldClass}
-              required={key === "title"}
-              value={String(form.tourPackage[key as keyof typeof form.tourPackage] ?? "")}
-              onChange={(e) =>
-                patchPackage({ [key]: e.target.value } as Partial<typeof form.tourPackage>)
-              }
-            />
-          </FormField>
-        ))}
+        <FormField
+          label="Title"
+          htmlFor="pkg-title"
+          hint="eg. Mauritius Classic Package"
+          required
+        >
+          <input
+            id="pkg-title"
+            className={fieldClass}
+            required
+            value={form.tourPackage.title}
+            onChange={(e) => patchPackage({ title: e.target.value })}
+          />
+        </FormField>
+        <HolidayImageUploadField
+          id="pkg-image"
+          label="Package image"
+          kind="package"
+          className="lg:col-span-2"
+          hint="Shown on package cards in vivance_ui."
+          value={form.tourPackage.imageUrl}
+          onChange={(imageUrl) => patchPackage({ imageUrl })}
+        />
+        <FormField label="Badge" htmlFor="pkg-badge" hint="eg. Recommended">
+          <input
+            id="pkg-badge"
+            className={fieldClass}
+            value={form.tourPackage.badge}
+            onChange={(e) => patchPackage({ badge: e.target.value })}
+          />
+        </FormField>
         <FormField
           label="Price"
           htmlFor="pkg-price"
