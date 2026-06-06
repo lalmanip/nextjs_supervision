@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import SetupMarkupForm from "./widgets/setup-markup-form";
+import SetupMarkupClient from "./widgets/setup-markup-client";
 
 export default function SetupMarkupPage() {
   return (
@@ -7,19 +7,19 @@ export default function SetupMarkupPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Setup Markup</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Configure markups per channel (B2B/B2C/Corporate) and supplier.
+          Configure platform-wide (GLOBAL) markup rules for B2B/B2C channels. Agents manage their own
+          overrides from the agent portal dashboard.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Create Markup Rule</CardTitle>
+          <CardTitle>Markup rules</CardTitle>
         </CardHeader>
         <CardContent>
-          <SetupMarkupForm />
+          <SetupMarkupClient />
         </CardContent>
       </Card>
     </div>
   );
 }
-
