@@ -3,6 +3,13 @@ export type Permission =
   | "supervision.agencyBalance.view"
   | "supervision.failedTransactions.view"
   | "supervision.holdTickets.view"
+  | "supervision.cancelledTickets.view"
+  | "supervision.b2cEnquiries.view"
+  | "supervision.agent.newRegistration.view"
+  | "supervision.agent.pendingRequest.view"
+  | "supervision.holidaysEnquiries.view"
+  | "supervision.holidays.createPackage.view"
+  | "supervision.holidays.updatePackage.view"
   | "supervision.setupMarkup.view"
   | "supervision.setupCommission.view"
   | "supervision.setupPromotions.view";

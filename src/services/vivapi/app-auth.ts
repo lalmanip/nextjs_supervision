@@ -168,3 +168,23 @@ export async function fetchVivapiAppBearer(
     throw err;
   }
 }
+
+/** Headers required by vivapi-user / vivapi-mt (X-API-KEY + Bearer from app login). */
+export function buildVivapiAuthorizedHeaders(
+  env: ServerEnv,
+  bearer: string
+): Record<string, string> {
+  const apiKey = env.VIV_X_API_KEY?.trim();
+  const token = bearer?.trim();
+  if (!apiKey) {
+    throw new Error("X-API-KEY is not configured (set VIV_X_API_KEY in .env.local)");
+  }
+  if (!token) {
+    throw new Error("Bearer token is empty (vivapi-auth app login did not return a token)");
+  }
+  return {
+    "Content-Type": "application/json",
+    "X-API-KEY": apiKey,
+    Authorization: `Bearer ${token}`,
+  };
+}

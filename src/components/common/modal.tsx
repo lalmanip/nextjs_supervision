@@ -36,11 +36,27 @@ export function ModalHeader({ className, ...props }: React.HTMLAttributes<HTMLDi
   return <div className={cn("mb-4 space-y-1", className)} {...props} />;
 }
 
-export function ModalTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-base font-semibold", className)} {...props} />;
-}
+export const ModalTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn("text-base font-semibold", className)}
+    {...props}
+  />
+));
+ModalTitle.displayName = "ModalTitle";
 
-export function ModalDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-zinc-600 dark:text-zinc-400", className)} {...props} />;
-}
+export const ModalDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-zinc-600 dark:text-zinc-400", className)}
+    {...props}
+  />
+));
+ModalDescription.displayName = "ModalDescription";
 

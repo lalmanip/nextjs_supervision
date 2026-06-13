@@ -17,3 +17,9 @@ export type LoginResponse = {
   user: SupervisionUser | null;
 };
 
+export type MeResponse = {
+  status: "success";
+  user: SupervisionUser | null;
+  token?: { decoded?: Record<string, unknown> };
+};
+

@@ -6,7 +6,17 @@ import {
   LayoutDashboard,
   Percent,
   ShieldCheck,
+  Inbox,
+  MessageSquare,
   Ticket,
+  TicketX,
+  Palmtree,
+  PlusCircle,
+  Pencil,
+  TreePalm,
+  Users,
+  UserPlus,
+  Wallet,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
 
@@ -75,6 +85,76 @@ export const supervisionMenu: MenuItem[] = [
     href: "/supervision/hold-tickets",
     icon: Ticket,
     required: "supervision.holdTickets.view",
+  },
+  {
+    key: "cancelled-tickets",
+    label: "Cancelled Tickets",
+    href: "/supervision/cancelled-tickets",
+    icon: TicketX,
+    required: "supervision.cancelledTickets.view",
+  },
+  {
+    key: "agent",
+    label: "Agent",
+    icon: Users,
+    children: [
+      {
+        key: "agent-new-registration",
+        label: "New Registration",
+        href: "/supervision/agent/new-registration",
+        icon: UserPlus,
+        required: "supervision.agent.newRegistration.view",
+      },
+      {
+        key: "agent-pending-request",
+        label: "Pending Request",
+        href: "/supervision/agent/pending-request",
+        icon: Wallet,
+        required: "supervision.agent.pendingRequest.view",
+      },
+    ],
+  },
+  {
+    key: "enquiry",
+    label: "Enquiry",
+    icon: Inbox,
+    children: [
+      {
+        key: "b2c-enquiry",
+        label: "B2C Enquiry",
+        href: "/supervision/b2c-enquiries",
+        icon: MessageSquare,
+        required: "supervision.b2cEnquiries.view",
+      },
+      {
+        key: "holidays-enquiry",
+        label: "Holidays Enquiry",
+        href: "/supervision/holidays-enquiries",
+        icon: TreePalm,
+        required: "supervision.holidaysEnquiries.view",
+      },
+    ],
+  },
+  {
+    key: "holidays",
+    label: "Holidays",
+    icon: Palmtree,
+    children: [
+      {
+        key: "holidays-create-package",
+        label: "Create Package",
+        href: "/supervision/holidays/create-package",
+        icon: PlusCircle,
+        required: "supervision.holidays.createPackage.view",
+      },
+      {
+        key: "holidays-update-package",
+        label: "Update Package",
+        href: "/supervision/holidays/update-package",
+        icon: Pencil,
+        required: "supervision.holidays.updatePackage.view",
+      },
+    ],
   },
 ];
 

@@ -11,6 +11,7 @@ import {
   sanitizeHeaders,
 } from "@/lib/api-debug";
 import { extractUserSessionToken } from "@/lib/user-service-token";
+import { normalizeSupervisionUser } from "@/lib/supervision-user-id";
 
 const AUTH_COOKIE = "sv_token";
 
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
     body = (await req.json()) as AuthenticateRequest;
   } catch {
     return NextResponse.json(
-      { message: "Invalid JSON body" },
+      { message: "Invalid JSON body " },
       { status: 400 }
     );
   }
@@ -144,9 +145,13 @@ export async function POST(req: Request) {
       maxAge,
     });
 
+    const rawUser =
+      (data as { response?: unknown })?.response ??
+      (data as { user?: unknown })?.user ??
+      null;
     const jsonBody = {
       status: "success" as const,
-      user: (data as any)?.response ?? (data as any)?.user ?? null,
+      user: normalizeSupervisionUser(rawUser),
     };
 
     if (isServerApiDebugEnabled()) {
