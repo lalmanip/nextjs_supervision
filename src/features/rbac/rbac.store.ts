@@ -16,6 +16,7 @@ const DEFAULT_PERMISSIONS: Permission[] = [
   "supervision.cancelledTickets.view",
   "supervision.b2cEnquiries.view",
   "supervision.agent.newRegistration.view",
+  "supervision.agent.registeredAgents.view",
   "supervision.agent.pendingRequest.view",
   "supervision.holidaysEnquiries.view",
   "supervision.holidays.createPackage.view",

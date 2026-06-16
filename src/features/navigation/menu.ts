@@ -16,6 +16,7 @@ import {
   TreePalm,
   Users,
   UserPlus,
+  UserCheck,
   Wallet,
 } from "lucide-react";
 import type { Permission } from "@/features/rbac/rbac.types";
@@ -104,6 +105,13 @@ export const supervisionMenu: MenuItem[] = [
         href: "/supervision/agent/new-registration",
         icon: UserPlus,
         required: "supervision.agent.newRegistration.view",
+      },
+      {
+        key: "agent-registered-agents",
+        label: "Registered Agents",
+        href: "/supervision/agent/registered-agents",
+        icon: UserCheck,
+        required: "supervision.agent.registeredAgents.view",
       },
       {
         key: "agent-pending-request",

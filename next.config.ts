@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   /** Smaller Docker images + `node server.js` runner (see Dockerfile). */
   output: "standalone",
 
+  compiler: {
+    removeConsole: isProd ? { exclude: ["error", "warn"] } : false,
+  },
+
   /**
    * IMPORTANT for running multiple Next apps on the same host:
    * - Pages are served under `/supervision/*` (by route structure)
