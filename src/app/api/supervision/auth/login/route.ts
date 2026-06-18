@@ -12,6 +12,10 @@ import {
 } from "@/lib/api-debug";
 import { extractUserSessionToken } from "@/lib/user-service-token";
 import { normalizeSupervisionUser } from "@/lib/supervision-user-id";
+import {
+  extractVivapiUserAuthenticateUser,
+  getVivapiUserAuthenticateFailure,
+} from "@/lib/vivapi-user-authenticate";
 
 const AUTH_COOKIE = "sv_token";
 
@@ -100,6 +104,7 @@ export async function POST(req: Request) {
     const res = await axios.post(upstreamUrl, payload, {
       headers: upstreamHeaders,
       timeout: 20_000,
+      validateStatus: () => true,
     });
 
     const { data } = res;
@@ -115,9 +120,41 @@ export async function POST(req: Request) {
       });
     }
 
+    if (res.status < 200 || res.status >= 300) {
+      const msg =
+        (data as { message?: string })?.message ||
+        (data as { error?: string })?.error ||
+        `Authentication failed (${res.status})`;
+      return NextResponse.json({ message: msg }, { status: 401 });
+    }
+
+    const authFailure = getVivapiUserAuthenticateFailure(data);
+    if (authFailure) {
+      return NextResponse.json({ message: authFailure }, { status: 401 });
+    }
+
+    const rawUser = extractVivapiUserAuthenticateUser(data);
+    const user = normalizeSupervisionUser(rawUser);
+    if (!user?.userId) {
+      return NextResponse.json(
+        {
+          message: "Authentication succeeded but user profile was missing",
+          stage: "user_authenticate" as const,
+        },
+        { status: 502 }
+      );
+    }
+    if (user.userType !== undefined && user.userType !== 1) {
+      return NextResponse.json(
+        { message: "This account is not authorized for SuperAdmin supervision" },
+        { status: 403 }
+      );
+    }
+
     const tokenFromUser = extractUserSessionToken(data, res.headers);
-    // Some deployments only validate the user via vivapi-user but return no new JWT;
-    // the gateway Bearer from vivapi-auth is still a valid JWT for middleware/cookie.
+    // Gateway Bearer is only for server-to-server calls — never treat it as a user session.
+    // Some deployments return no JWT from authenticate; after a successful password check we
+    // may still use the gateway token for middleware expiry checks only.
     const token = tokenFromUser ?? gatewayBearer;
     if (!token) {
       return NextResponse.json(
@@ -145,13 +182,9 @@ export async function POST(req: Request) {
       maxAge,
     });
 
-    const rawUser =
-      (data as { response?: unknown })?.response ??
-      (data as { user?: unknown })?.user ??
-      null;
     const jsonBody = {
       status: "success" as const,
-      user: normalizeSupervisionUser(rawUser),
+      user,
     };
 
     if (isServerApiDebugEnabled()) {
