@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
+import EnvRibbon from "@/components/env-ribbon";
+import { parseEnvRibbonLabel } from "@/lib/envRibbon";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,12 +30,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const envRibbonLabel = parseEnvRibbonLabel();
+  const ribbonStyle = envRibbonLabel
+    ? ({ ["--env-ribbon-height" as string]: "2rem" } as React.CSSProperties)
+    : undefined;
+
   return (
     <html
       lang="en"
+      style={ribbonStyle}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {envRibbonLabel ? <EnvRibbon label={envRibbonLabel} /> : null}
         {children}
         <Toaster richColors position="top-right" />
       </body>
