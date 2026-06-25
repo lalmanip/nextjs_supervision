@@ -411,7 +411,7 @@ export default function NewRegistrationClient() {
   const openInitialize = React.useCallback(
     (row: B2bPendingActivationRow) => {
       setInitialBalance(0);
-      setInitialCreditLimit(200000);
+      setInitialCreditLimit(0);
       setCurrencyConverterFk(1);
       if (authUser?.userId) {
         setPerformedByUserId(authUser.userId);
