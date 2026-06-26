@@ -102,6 +102,7 @@ export function logApiDebug(scope: string, payload: Record<string, unknown>): vo
     ...payload,
     at: new Date().toISOString(),
   };
+  // Use warn so output survives `compiler.removeConsole` in production Docker builds.
   // eslint-disable-next-line no-console -- intentional troubleshooting output
-  console.log(PREFIX, JSON.stringify(line, null, 2));
+  console.warn(PREFIX, JSON.stringify(line, null, 2));
 }
