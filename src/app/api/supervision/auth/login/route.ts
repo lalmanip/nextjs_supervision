@@ -1,28 +1,22 @@
 import { NextResponse } from "next/server";
-import axios from "axios";
 import { cookies } from "next/headers";
 import { getServerEnv } from "@/lib/env";
 import { getJwtExpiryMs } from "@/lib/auth";
-import { fetchVivapiAppBearer } from "@/services/vivapi/app-auth";
 import {
   isServerApiDebugEnabled,
   logApiDebug,
   sanitizeForLog,
   sanitizeHeaders,
 } from "@/lib/api-debug";
-import { extractUserSessionToken } from "@/lib/user-service-token";
 import { normalizeSupervisionUser } from "@/lib/supervision-user-id";
-import {
-  extractVivapiUserAuthenticateUser,
-  getVivapiUserAuthenticateFailure,
-} from "@/lib/vivapi-user-authenticate";
+import { loginViaAuthGatewayAndFetchProfile } from "@/lib/user-auth-login";
 
 const AUTH_COOKIE = "sv_token";
 
 type AuthenticateRequest = {
   userName: string;
   password: string;
-  userType: number;
+  userType?: number;
 };
 
 export async function POST(req: Request) {
@@ -58,120 +52,48 @@ export async function POST(req: Request) {
     );
   }
 
-  // Enforce SuperAdmin userType = 1
-  const payload: AuthenticateRequest = {
-    userName: body.userName,
-    password: body.password,
-    userType: 1,
-  };
-
   const env = getServerEnv();
-  const upstreamUrl = `${env.USER_REPO_URL.replace(/\/$/, "")}/vivapi-user/user/authenticate`;
 
   try {
-    let gatewayBearer: string;
-    try {
-      // vivapi-auth call details: see fetchVivapiAppBearer when SUPERVISION_API_DEBUG=true
-      gatewayBearer = await fetchVivapiAppBearer(env);
-    } catch (authErr: any) {
-      const msg =
-        authErr?.response?.data?.message ||
-        authErr?.response?.data?.error ||
-        authErr?.message ||
-        "Failed to obtain API token from auth service";
+    const loginResult = await loginViaAuthGatewayAndFetchProfile({
+      authBaseUrl: env.AUTH_URL,
+      userBaseUrl: env.USER_REPO_URL,
+      apiKey: env.VIV_X_API_KEY,
+      userName: body.userName,
+      password: body.password,
+      requiredUserType: 1,
+    });
+
+    if (!loginResult.ok) {
+      const status =
+        loginResult.stage === "authorization"
+          ? 403
+          : loginResult.stage === "vivapi_auth"
+            ? 401
+            : 502;
       return NextResponse.json(
-        { message: msg, stage: "vivapi_auth" as const },
-        { status: 502 }
+        { message: loginResult.message, stage: loginResult.stage },
+        { status }
       );
     }
 
-    const upstreamHeaders = {
-      "Content-Type": "application/json",
-      "X-API-KEY": env.VIV_X_API_KEY,
-      Authorization: `Bearer ${gatewayBearer}`,
-    };
-
-    if (isServerApiDebugEnabled()) {
-      logApiDebug("route:POST /api/supervision/auth/login (upstream request)", {
-        endpoint: upstreamUrl,
-        method: "POST",
-        params: null,
-        requestHeaders: sanitizeHeaders(upstreamHeaders),
-        requestBody: sanitizeForLog(payload),
-      });
-    }
-
-    const res = await axios.post(upstreamUrl, payload, {
-      headers: upstreamHeaders,
-      timeout: 20_000,
-      validateStatus: () => true,
-    });
-
-    const { data } = res;
-
-    if (isServerApiDebugEnabled()) {
-      logApiDebug("route:POST /api/supervision/auth/login (upstream response)", {
-        endpoint: upstreamUrl,
-        method: "POST",
-        status: res.status,
-        statusText: res.statusText,
-        responseHeaders: sanitizeHeaders(res.headers as unknown as Record<string, unknown>),
-        responseData: sanitizeForLog(data),
-      });
-    }
-
-    if (res.status < 200 || res.status >= 300) {
-      const msg =
-        (data as { message?: string })?.message ||
-        (data as { error?: string })?.error ||
-        `Authentication failed (${res.status})`;
-      return NextResponse.json({ message: msg }, { status: 401 });
-    }
-
-    const authFailure = getVivapiUserAuthenticateFailure(data);
-    if (authFailure) {
-      return NextResponse.json({ message: authFailure }, { status: 401 });
-    }
-
-    const rawUser = extractVivapiUserAuthenticateUser(data);
-    const user = normalizeSupervisionUser(rawUser);
+    const user = normalizeSupervisionUser(loginResult.profile);
     if (!user?.userId) {
       return NextResponse.json(
         {
           message: "Authentication succeeded but user profile was missing",
-          stage: "user_authenticate" as const,
-        },
-        { status: 502 }
-      );
-    }
-    if (user.userType !== undefined && user.userType !== 1) {
-      return NextResponse.json(
-        { message: "This account is not authorized for SuperAdmin supervision" },
-        { status: 403 }
-      );
-    }
-
-    const tokenFromUser = extractUserSessionToken(data, res.headers);
-    // Gateway Bearer is only for server-to-server calls — never treat it as a user session.
-    // Some deployments return no JWT from authenticate; after a successful password check we
-    // may still use the gateway token for middleware expiry checks only.
-    const token = tokenFromUser ?? gatewayBearer;
-    if (!token) {
-      return NextResponse.json(
-        {
-          message:
-            "User service returned success but no session JWT was found. Enable SUPERVISION_API_DEBUG=true and inspect the logged response shape, or confirm the API returns a JWT in JSON (Token/token/…) or via Authorization / Set-Cookie headers.",
-          stage: "user_authenticate" as const,
+          stage: "vivapi_user" as const,
         },
         { status: 502 }
       );
     }
 
+    const token = loginResult.accessToken;
     const expMs = getJwtExpiryMs(token);
     const maxAge =
       expMs && expMs > Date.now()
         ? Math.max(1, Math.floor((expMs - Date.now()) / 1000))
-        : 60 * 60; // fallback 1h
+        : 60 * 60;
 
     const cookieStore = await cookies();
     cookieStore.set(AUTH_COOKIE, token, {
@@ -197,28 +119,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // Never echo the token back to the browser JS
     return NextResponse.json(jsonBody, { status: 200 });
-  } catch (err: any) {
-    if (isServerApiDebugEnabled()) {
-      logApiDebug("route:POST /api/supervision/auth/login (upstream error)", {
-        endpoint: upstreamUrl,
-        method: "POST",
-        status: err?.response?.status,
-        statusText: err?.response?.statusText,
-        responseHeaders: err?.response?.headers
-          ? sanitizeHeaders(err.response.headers as Record<string, unknown>)
-          : {},
-        responseData: sanitizeForLog(err?.response?.data),
-        errorMessage: err?.message,
-      });
-    }
-    const status = err?.response?.status ?? 401;
-    const message =
-      err?.response?.data?.message ||
-      err?.response?.data?.error ||
-      "Invalid username or password";
-    return NextResponse.json({ message }, { status });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Invalid username or password";
+    return NextResponse.json({ message }, { status: 401 });
   }
 }
-
