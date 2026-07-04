@@ -25,6 +25,9 @@ export const metadata: Metadata = {
   },
 };
 
+/** Read APP_ENVIRONMENT from pod/runtime env (not only at Docker build time). */
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{
