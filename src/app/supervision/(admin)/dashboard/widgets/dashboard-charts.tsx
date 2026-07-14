@@ -10,18 +10,44 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { DashboardDailyTrend } from "@/types/dashboard-metrics";
 
-const data = [
-  { name: "Mon", bookings: 420, revenue: 1800 },
-  { name: "Tue", bookings: 610, revenue: 2500 },
-  { name: "Wed", bookings: 540, revenue: 2100 },
-  { name: "Thu", bookings: 820, revenue: 3400 },
-  { name: "Fri", bookings: 760, revenue: 3200 },
-  { name: "Sat", bookings: 680, revenue: 2900 },
-  { name: "Sun", bookings: 710, revenue: 3100 },
-];
+type ChartPoint = {
+  name: string;
+  bookings: number;
+  revenue: number;
+};
 
-export default function DashboardCharts() {
+function toChartData(trends: DashboardDailyTrend[]): ChartPoint[] {
+  return trends.map((t) => {
+    const d = t.date ? new Date(`${t.date}T00:00:00`) : null;
+    const name =
+      d && !Number.isNaN(d.getTime())
+        ? d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })
+        : t.date || "—";
+    return {
+      name,
+      bookings: t.bookings,
+      revenue: t.revenue,
+    };
+  });
+}
+
+export default function DashboardCharts({
+  trends,
+}: {
+  trends: DashboardDailyTrend[];
+}) {
+  const data = React.useMemo(() => toChartData(trends), [trends]);
+
+  if (data.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+        No booking activity in the last 7 days.
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
@@ -47,4 +73,3 @@ export default function DashboardCharts() {
     </ResponsiveContainer>
   );
 }
-
